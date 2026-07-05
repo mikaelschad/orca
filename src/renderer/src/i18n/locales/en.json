@@ -12381,7 +12381,12 @@
         "c4a28ce57d": "Comment is too large to submit safely.",
         "220c5f00b7": "Failed to update YouTrack issue.",
         "5a267e1d47": "Failed to copy {{value0}}",
-        "c432b957b7": "{{value0}} copied"
+        "c432b957b7": "{{value0}} copied",
+        "noPriority": "No priority",
+        "addAssignee": "+ Assignee",
+        "unassigned": "Unassigned",
+        "tags": "Tags",
+        "failedToRemoveTag": "Failed to remove tag."
       }
     },
     "i18n": {

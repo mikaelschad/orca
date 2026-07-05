@@ -11,7 +11,9 @@ import type {
   YouTrackIssueFilter,
   YouTrackIssueUpdate,
   YouTrackMutationResult,
+  YouTrackPriority,
   YouTrackProject,
+  YouTrackTransition,
   YouTrackUser
 } from '../../shared/types'
 import {
@@ -381,7 +383,7 @@ export async function updateIssue(
       customFields.push({
         name: 'Priority',
         $type: 'SingleEnumIssueCustomField',
-        value: { name: updates.priorityName }
+        value: updates.priorityName ? { name: updates.priorityName } : null
       })
     }
     if (customFields.length > 0) {
@@ -505,4 +507,229 @@ export async function listProjects(
     })
   )
   return results.flat().sort((a, b) => a.name.localeCompare(b.name))
+}
+
+export async function listTransitions(
+  id: string,
+  instanceId?: string | null
+): Promise<YouTrackTransition[]> {
+  const entry = getClients(instanceId)[0]
+  if (!entry) {
+    return []
+  }
+  await acquire()
+  try {
+    const response = await youtrackRequest<YouTrackRecord>(
+      entry,
+      `/issues/${encodeURIComponent(id)}?fields=customFields(name,value(name,isResolved),bundle(id))`
+    )
+    const customFields = Array.isArray(response.customFields) ? response.customFields : []
+    const stateField = findCustomField(customFields, 'State')
+    if (!stateField) {
+      return []
+    }
+    const bundleId = asString(asRecord(stateField.bundle).id)
+    if (!bundleId) {
+      return []
+    }
+    const states = await youtrackRequest<YouTrackRecord[]>(
+      entry,
+      `/admin/customFieldSettings/bundles/state/${encodeURIComponent(bundleId)}/values?fields=id,name,isResolved`
+    )
+    return (states ?? []).map((state) => ({
+      id: asString(state.id),
+      name: asString(state.name),
+      to: {
+        name: asString(state.name),
+        resolved: state.isResolved === true
+      }
+    }))
+  } catch (error) {
+    if (isAuthError(error)) {
+      clearToken(entry.instance.id)
+      throw error
+    }
+    console.warn('[youtrack] listTransitions failed:', error)
+    return []
+  } finally {
+    release()
+  }
+}
+
+export async function listPriorities(instanceId?: string | null): Promise<YouTrackPriority[]> {
+  const entry = getClients(instanceId)[0]
+  if (!entry) {
+    return []
+  }
+  await acquire()
+  try {
+    const response = await youtrackRequest<YouTrackRecord[]>(
+      entry,
+      `/issues?fields=customFields(name,bundle(id))&$top=1`
+    )
+    const issues = Array.isArray(response) ? response : [response]
+    const firstIssue = issues[0]
+    const customFields = Array.isArray(firstIssue?.customFields) ? firstIssue.customFields : []
+    const priorityField = findCustomField(customFields, 'Priority')
+    if (!priorityField) {
+      return []
+    }
+    const bundleId = asString(asRecord(priorityField.bundle).id)
+    if (!bundleId) {
+      return []
+    }
+    const priorities = await youtrackRequest<YouTrackRecord[]>(
+      entry,
+      `/admin/customFieldSettings/bundles/enum/${encodeURIComponent(bundleId)}/values?fields=id,name`
+    )
+    return (priorities ?? []).map((priority) => ({
+      name: asString(priority.name)
+    }))
+  } catch (error) {
+    if (isAuthError(error)) {
+      clearToken(entry.instance.id)
+      throw error
+    }
+    console.warn('[youtrack] listPriorities failed:', error)
+    return []
+  } finally {
+    release()
+  }
+}
+
+export async function listAssignableUsers(
+  id: string,
+  instanceId?: string | null
+): Promise<YouTrackUser[]> {
+  const entry = getClients(instanceId)[0]
+  if (!entry) {
+    return []
+  }
+  await acquire()
+  try {
+    const issue = await youtrackRequest<YouTrackRecord>(
+      entry,
+      `/issues/${encodeURIComponent(id)}?fields=project(id)`
+    )
+    const projectId = asString(asRecord(issue.project).id)
+    if (!projectId) {
+      return []
+    }
+    const customFields = await youtrackRequest<YouTrackRecord[]>(
+      entry,
+      `/admin/projects/${encodeURIComponent(projectId)}/customFields?fields=name,bundle(id)`
+    )
+    const customFieldsArray = Array.isArray(customFields) ? customFields : []
+    const assigneeField = customFieldsArray.find(
+      (field) => field && typeof field === 'object' && (field as YouTrackRecord).name === 'Assignee'
+    )
+    if (!assigneeField) {
+      return []
+    }
+    const bundleId = asString(asRecord(assigneeField.bundle).id)
+    if (!bundleId) {
+      return []
+    }
+    const result = await youtrackRequest<YouTrackRecord[]>(
+      entry,
+      `/admin/customFieldSettings/bundles/user/${encodeURIComponent(bundleId)}/values?fields=id,login,fullName,email,avatarUrl(url)`
+    )
+    return (result ?? []).map(mapUser).filter((user): user is YouTrackUser => !!user)
+  } catch (error) {
+    if (isAuthError(error)) {
+      clearToken(entry.instance.id)
+      throw error
+    }
+    console.warn('[youtrack] listAssignableUsers failed:', error)
+    return []
+  } finally {
+    release()
+  }
+}
+
+export async function listIssueTags(
+  id: string,
+  instanceId?: string | null
+): Promise<YouTrackUser[]> {
+  const entry = getClients(instanceId)[0]
+  if (!entry) {
+    return []
+  }
+  await acquire()
+  try {
+    const tags = await youtrackRequest<YouTrackRecord[]>(
+      entry,
+      `/issueTags?query=${encodeURIComponent(`issue:${id}`)}&fields=id,name`
+    )
+    return (tags ?? []).map((tag) => ({
+      id: asString(tag.id),
+      displayName: asString(tag.name)
+    })) as YouTrackUser[]
+  } catch (error) {
+    if (isAuthError(error)) {
+      clearToken(entry.instance.id)
+      throw error
+    }
+    console.warn('[youtrack] listIssueTags failed:', error)
+    return []
+  } finally {
+    release()
+  }
+}
+
+export async function addIssueTag(
+  issueId: string,
+  tagId: string,
+  instanceId?: string | null
+): Promise<YouTrackMutationResult> {
+  const entry = getClients(instanceId)[0]
+  if (!entry) {
+    return { ok: false, error: 'Not connected to YouTrack.' }
+  }
+  await acquire()
+  try {
+    await youtrackRequest(entry, `/issues/${encodeURIComponent(issueId)}/tags`, {
+      method: 'POST',
+      body: JSON.stringify({ id: tagId })
+    })
+    return { ok: true }
+  } catch (error) {
+    if (isAuthError(error)) {
+      clearToken(entry.instance.id)
+      throw error
+    }
+    return { ok: false, error: error instanceof Error ? error.message : 'Failed to add tag.' }
+  } finally {
+    release()
+  }
+}
+
+export async function removeIssueTag(
+  issueId: string,
+  tagId: string,
+  instanceId?: string | null
+): Promise<YouTrackMutationResult> {
+  const entry = getClients(instanceId)[0]
+  if (!entry) {
+    return { ok: false, error: 'Not connected to YouTrack.' }
+  }
+  await acquire()
+  try {
+    await youtrackRequest(
+      entry,
+      `/issues/${encodeURIComponent(issueId)}/tags/${encodeURIComponent(tagId)}`,
+      {
+        method: 'DELETE'
+      }
+    )
+    return { ok: true }
+  } catch (error) {
+    if (isAuthError(error)) {
+      clearToken(entry.instance.id)
+      throw error
+    }
+    return { ok: false, error: error instanceof Error ? error.message : 'Failed to remove tag.' }
+  } finally {
+    release()
+  }
 }

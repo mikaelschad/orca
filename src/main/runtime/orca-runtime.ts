@@ -542,10 +542,16 @@ import {
 import {
   addIssueComment as addYouTrackIssueComment,
   createIssue as createYouTrackIssue,
+  addIssueTag as addYouTrackIssueTag,
   getIssue as getYouTrackIssue,
   getIssueComments as getYouTrackIssueComments,
+  listAssignableUsers as listYouTrackAssignableUsers,
   listIssues as listYouTrackIssues,
+  listIssueTags as listYouTrackIssueTags,
+  listPriorities as listYouTrackPriorities,
   listProjects as listYouTrackProjects,
+  listTransitions as listYouTrackTransitions,
+  removeIssueTag as removeYouTrackIssueTag,
   searchIssues as searchYouTrackIssues,
   updateIssue as updateYouTrackIssue
 } from '../youtrack/issues'
@@ -22091,6 +22097,44 @@ export class OrcaRuntimeService {
     instanceId?: YouTrackInstanceSelection
   ): ReturnType<typeof listYouTrackProjects> {
     return listYouTrackProjects(instanceId)
+  }
+
+  youtrackListTransitions(
+    id: string,
+    instanceId?: string
+  ): ReturnType<typeof listYouTrackTransitions> {
+    return listYouTrackTransitions(id, instanceId)
+  }
+
+  youtrackListPriorities(instanceId?: string): ReturnType<typeof listYouTrackPriorities> {
+    return listYouTrackPriorities(instanceId)
+  }
+
+  youtrackListAssignableUsers(
+    id: string,
+    instanceId?: string
+  ): ReturnType<typeof listYouTrackAssignableUsers> {
+    return listYouTrackAssignableUsers(id, instanceId)
+  }
+
+  youtrackListIssueTags(id: string, instanceId?: string): ReturnType<typeof listYouTrackIssueTags> {
+    return listYouTrackIssueTags(id, instanceId)
+  }
+
+  youtrackAddIssueTag(
+    issueId: string,
+    tagId: string,
+    instanceId?: string
+  ): ReturnType<typeof addYouTrackIssueTag> {
+    return addYouTrackIssueTag(issueId, tagId, instanceId)
+  }
+
+  youtrackRemoveIssueTag(
+    issueId: string,
+    tagId: string,
+    instanceId?: string
+  ): ReturnType<typeof removeYouTrackIssueTag> {
+    return removeYouTrackIssueTag(issueId, tagId, instanceId)
   }
 
   // ── Browser automation ──

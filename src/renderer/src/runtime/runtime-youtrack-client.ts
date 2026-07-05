@@ -9,7 +9,10 @@ import type {
   YouTrackIssueFilter,
   YouTrackIssueUpdate,
   YouTrackMutationResult,
+  YouTrackPriority,
   YouTrackProject,
+  YouTrackTransition,
+  YouTrackUser,
   YouTrackViewer
 } from '../../../shared/types'
 import { callRuntimeRpc, getActiveRuntimeTarget } from './runtime-rpc-client'
@@ -230,4 +233,91 @@ export async function youtrackListProjects(
         { timeoutMs: 30_000 }
       )
     : window.api.youtrack.listProjects(instanceId ? { instanceId } : undefined)
+}
+
+export async function youtrackListTransitions(
+  settings: RuntimeYouTrackSettings,
+  id: string,
+  instanceId?: string | null
+): Promise<YouTrackTransition[]> {
+  const target = getYouTrackRuntimeTarget(settings)
+  const args = { id, instanceId: instanceId ?? undefined }
+  return target.kind === 'environment'
+    ? callRuntimeRpc<YouTrackTransition[]>(target, 'youtrack.listTransitions', args, {
+        timeoutMs: 30_000
+      })
+    : window.api.youtrack.listTransitions(args)
+}
+
+export async function youtrackListPriorities(
+  settings: RuntimeYouTrackSettings,
+  instanceId?: string | null
+): Promise<YouTrackPriority[]> {
+  const target = getYouTrackRuntimeTarget(settings)
+  return target.kind === 'environment'
+    ? callRuntimeRpc<YouTrackPriority[]>(
+        target,
+        'youtrack.listPriorities',
+        instanceId ? { instanceId } : undefined,
+        { timeoutMs: 30_000 }
+      )
+    : window.api.youtrack.listPriorities(instanceId ? { instanceId } : undefined)
+}
+
+export async function youtrackListAssignableUsers(
+  settings: RuntimeYouTrackSettings,
+  id: string,
+  instanceId?: string | null
+): Promise<YouTrackUser[]> {
+  const target = getYouTrackRuntimeTarget(settings)
+  const args = { id, instanceId: instanceId ?? undefined }
+  return target.kind === 'environment'
+    ? callRuntimeRpc<YouTrackUser[]>(target, 'youtrack.listAssignableUsers', args, {
+        timeoutMs: 30_000
+      })
+    : window.api.youtrack.listAssignableUsers(args)
+}
+
+export async function youtrackListIssueTags(
+  settings: RuntimeYouTrackSettings,
+  id: string,
+  instanceId?: string | null
+): Promise<YouTrackUser[]> {
+  const target = getYouTrackRuntimeTarget(settings)
+  const args = { id, instanceId: instanceId ?? undefined }
+  return target.kind === 'environment'
+    ? callRuntimeRpc<YouTrackUser[]>(target, 'youtrack.listIssueTags', args, {
+        timeoutMs: 30_000
+      })
+    : window.api.youtrack.listIssueTags(args)
+}
+
+export async function youtrackAddIssueTag(
+  settings: RuntimeYouTrackSettings,
+  issueId: string,
+  tagId: string,
+  instanceId?: string | null
+): Promise<YouTrackMutationResult> {
+  const target = getYouTrackRuntimeTarget(settings)
+  const args = { issueId, tagId, instanceId: instanceId ?? undefined }
+  return target.kind === 'environment'
+    ? callRuntimeRpc<YouTrackMutationResult>(target, 'youtrack.addIssueTag', args, {
+        timeoutMs: 30_000
+      })
+    : window.api.youtrack.addIssueTag(args)
+}
+
+export async function youtrackRemoveIssueTag(
+  settings: RuntimeYouTrackSettings,
+  issueId: string,
+  tagId: string,
+  instanceId?: string | null
+): Promise<YouTrackMutationResult> {
+  const target = getYouTrackRuntimeTarget(settings)
+  const args = { issueId, tagId, instanceId: instanceId ?? undefined }
+  return target.kind === 'environment'
+    ? callRuntimeRpc<YouTrackMutationResult>(target, 'youtrack.removeIssueTag', args, {
+        timeoutMs: 30_000
+      })
+    : window.api.youtrack.removeIssueTag(args)
 }

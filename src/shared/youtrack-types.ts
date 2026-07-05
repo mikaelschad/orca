@@ -48,6 +48,17 @@ export type YouTrackPriority = {
   name: string
 }
 
+export type YouTrackStateValue = {
+  name: string
+  resolved: boolean
+}
+
+export type YouTrackTransition = {
+  id: string
+  name: string
+  to: YouTrackStateValue
+}
+
 export type YouTrackIssue = {
   id: string
   idReadable: string
@@ -79,7 +90,7 @@ export type YouTrackIssueUpdate = {
   description?: string
   assigneeId?: string | null
   stateName?: string
-  priorityName?: string
+  priorityName?: string | null
 }
 
 export type YouTrackIssueFilter = 'assigned' | 'reported' | 'all' | 'unresolved'

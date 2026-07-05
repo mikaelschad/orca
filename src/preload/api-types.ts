@@ -108,7 +108,10 @@ import type {
   YouTrackIssue,
   YouTrackIssueFilter,
   YouTrackIssueUpdate,
+  YouTrackPriority,
   YouTrackProject,
+  YouTrackTransition,
+  YouTrackUser,
   YouTrackViewer,
   LinearViewer,
   LinearCollectionResult,
@@ -1892,6 +1895,20 @@ export type PreloadApi = {
     }) => Promise<{ ok: true; id: string } | { ok: false; error: string }>
     issueComments: (args: { id: string; instanceId?: string }) => Promise<YouTrackComment[]>
     listProjects: (args?: { instanceId?: YouTrackInstanceSelection }) => Promise<YouTrackProject[]>
+    listTransitions: (args: { id: string; instanceId?: string }) => Promise<YouTrackTransition[]>
+    listPriorities: (args?: { instanceId?: string }) => Promise<YouTrackPriority[]>
+    listAssignableUsers: (args: { id: string; instanceId?: string }) => Promise<YouTrackUser[]>
+    listIssueTags: (args: { id: string; instanceId?: string }) => Promise<YouTrackUser[]>
+    addIssueTag: (args: {
+      issueId: string
+      tagId: string
+      instanceId?: string
+    }) => Promise<{ ok: true } | { ok: false; error: string }>
+    removeIssueTag: (args: {
+      issueId: string
+      tagId: string
+      instanceId?: string
+    }) => Promise<{ ok: true } | { ok: false; error: string }>
   }
   starNag: {
     onShow: (

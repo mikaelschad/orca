@@ -58,13 +58,19 @@ const IssueUpdate = z.object({
     description: OptionalPlainString,
     assigneeId: z.union([z.string(), z.null()]).optional(),
     stateName: OptionalString,
-    priorityName: OptionalString
+    priorityName: z.union([OptionalString, z.null()]).optional()
   })
 })
 
 const IssueComment = z.object({
   id: requiredString('Issue id is required'),
   body: requiredString('Comment body is required'),
+  instanceId: OptionalString
+})
+
+const IssueTag = z.object({
+  issueId: requiredString('Issue id is required'),
+  tagId: requiredString('Tag id is required'),
   instanceId: OptionalString
 })
 
@@ -149,5 +155,40 @@ export const YOUTRACK_METHODS: RpcMethod[] = [
     name: 'youtrack.listProjects',
     params: InstanceSelection,
     handler: async (params, { runtime }) => runtime.youtrackListProjects(params?.instanceId)
+  }),
+  defineMethod({
+    name: 'youtrack.listTransitions',
+    params: IssueId,
+    handler: async (params, { runtime }) =>
+      runtime.youtrackListTransitions(params.id.trim(), params.instanceId)
+  }),
+  defineMethod({
+    name: 'youtrack.listPriorities',
+    params: InstanceSelection,
+    handler: async (params, { runtime }) => runtime.youtrackListPriorities(params?.instanceId)
+  }),
+  defineMethod({
+    name: 'youtrack.listAssignableUsers',
+    params: IssueId,
+    handler: async (params, { runtime }) =>
+      runtime.youtrackListAssignableUsers(params.id.trim(), params.instanceId)
+  }),
+  defineMethod({
+    name: 'youtrack.listIssueTags',
+    params: IssueId,
+    handler: async (params, { runtime }) =>
+      runtime.youtrackListIssueTags(params.id.trim(), params.instanceId)
+  }),
+  defineMethod({
+    name: 'youtrack.addIssueTag',
+    params: IssueTag,
+    handler: async (params, { runtime }) =>
+      runtime.youtrackAddIssueTag(params.issueId.trim(), params.tagId.trim(), params.instanceId)
+  }),
+  defineMethod({
+    name: 'youtrack.removeIssueTag',
+    params: IssueTag,
+    handler: async (params, { runtime }) =>
+      runtime.youtrackRemoveIssueTag(params.issueId.trim(), params.tagId.trim(), params.instanceId)
   })
 ]

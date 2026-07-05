@@ -3,10 +3,16 @@ import { connect, disconnect, getStatus, selectInstance, testConnection } from '
 import { _resetPreflightCache } from './preflight'
 import {
   addIssueComment,
+  addIssueTag,
   createIssue,
   getIssue,
   getIssueComments,
+  listAssignableUsers,
+  listIssueTags,
+  listPriorities,
   listProjects,
+  listTransitions,
+  removeIssueTag,
   searchIssues,
   listIssues,
   updateIssue
@@ -56,7 +62,11 @@ function normalizeIssueUpdate(value: unknown): YouTrackIssueUpdate | null {
   if (input.stateName !== undefined && typeof input.stateName !== 'string') {
     return null
   }
-  if (input.priorityName !== undefined && typeof input.priorityName !== 'string') {
+  if (
+    input.priorityName !== undefined &&
+    input.priorityName !== null &&
+    typeof input.priorityName !== 'string'
+  ) {
     return null
   }
   return input
@@ -199,6 +209,74 @@ export function registerYouTrackHandlers(): void {
     'youtrack:listProjects',
     async (_event, args?: { instanceId?: YouTrackInstanceSelection }) => {
       return listProjects(normalizeInstanceSelection(args?.instanceId))
+    }
+  )
+
+  ipcMain.handle(
+    'youtrack:listTransitions',
+    async (_event, args: { id: string; instanceId?: string }) => {
+      if (typeof args?.id !== 'string' || !args.id.trim()) {
+        return []
+      }
+      return listTransitions(args.id.trim(), normalizeInstanceId(args.instanceId))
+    }
+  )
+
+  ipcMain.handle('youtrack:listPriorities', async (_event, args?: { instanceId?: string }) => {
+    return listPriorities(normalizeInstanceId(args?.instanceId))
+  })
+
+  ipcMain.handle(
+    'youtrack:listAssignableUsers',
+    async (_event, args: { id: string; instanceId?: string }) => {
+      if (typeof args?.id !== 'string' || !args.id.trim()) {
+        return []
+      }
+      return listAssignableUsers(args.id.trim(), normalizeInstanceId(args.instanceId))
+    }
+  )
+
+  ipcMain.handle(
+    'youtrack:listIssueTags',
+    async (_event, args: { id: string; instanceId?: string }) => {
+      if (typeof args?.id !== 'string' || !args.id.trim()) {
+        return []
+      }
+      return listIssueTags(args.id.trim(), normalizeInstanceId(args.instanceId))
+    }
+  )
+
+  ipcMain.handle(
+    'youtrack:addIssueTag',
+    async (_event, args: { issueId: string; tagId: string; instanceId?: string }) => {
+      if (typeof args?.issueId !== 'string' || !args.issueId.trim()) {
+        return { ok: false, error: 'Issue id is required.' }
+      }
+      if (typeof args?.tagId !== 'string' || !args.tagId.trim()) {
+        return { ok: false, error: 'Tag id is required.' }
+      }
+      return addIssueTag(
+        args.issueId.trim(),
+        args.tagId.trim(),
+        normalizeInstanceId(args.instanceId)
+      )
+    }
+  )
+
+  ipcMain.handle(
+    'youtrack:removeIssueTag',
+    async (_event, args: { issueId: string; tagId: string; instanceId?: string }) => {
+      if (typeof args?.issueId !== 'string' || !args.issueId.trim()) {
+        return { ok: false, error: 'Issue id is required.' }
+      }
+      if (typeof args?.tagId !== 'string' || !args.tagId.trim()) {
+        return { ok: false, error: 'Tag id is required.' }
+      }
+      return removeIssueTag(
+        args.issueId.trim(),
+        args.tagId.trim(),
+        normalizeInstanceId(args.instanceId)
+      )
     }
   )
 }

@@ -1857,7 +1857,9 @@ export type {
   YouTrackMutationResult,
   YouTrackPriority,
   YouTrackProject,
+  YouTrackStateValue,
   YouTrackStatus,
+  YouTrackTransition,
   YouTrackUser,
   YouTrackViewer
 } from './youtrack-types'

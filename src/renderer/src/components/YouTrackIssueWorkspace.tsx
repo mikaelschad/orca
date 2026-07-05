@@ -19,6 +19,7 @@ import { VisuallyHidden } from 'radix-ui'
 import CommentMarkdown from '@/components/sidebar/CommentMarkdown'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { Sheet, SheetContent, SheetDescription, SheetTitle } from '@/components/ui/sheet'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { cn } from '@/lib/utils'
@@ -32,9 +33,20 @@ import {
   youtrackAddIssueComment,
   youtrackGetIssue,
   youtrackIssueComments,
+  youtrackListAssignableUsers,
+  youtrackListIssueTags,
+  youtrackListPriorities,
+  youtrackListTransitions,
+  youtrackRemoveIssueTag,
   youtrackUpdateIssue
 } from '@/runtime/runtime-youtrack-client'
-import type { YouTrackComment, YouTrackIssue } from '../../../shared/types'
+import type {
+  YouTrackComment,
+  YouTrackIssue,
+  YouTrackPriority,
+  YouTrackTransition,
+  YouTrackUser
+} from '../../../shared/types'
 import type { TaskSourceContext } from '../../../shared/task-source-context'
 import { translate } from '@/i18n/i18n'
 
@@ -113,6 +125,10 @@ export default function YouTrackIssueWorkspace({
   const [comments, setComments] = useState<YouTrackComment[]>([])
   const [commentsLoading, setCommentsLoading] = useState(false)
   const [commentsError, setCommentsError] = useState<string | null>(null)
+  const [transitions, setTransitions] = useState<YouTrackTransition[]>([])
+  const [priorities, setPriorities] = useState<YouTrackPriority[]>([])
+  const [users, setUsers] = useState<YouTrackUser[]>([])
+  const [tags, setTags] = useState<YouTrackUser[]>([])
   const [pendingField, setPendingField] = useState<string | null>(null)
   const [titleDraft, setTitleDraft] = useState('')
   const [commentDraft, setCommentDraft] = useState('')
@@ -161,6 +177,10 @@ export default function YouTrackIssueWorkspace({
       setIssueLoading(false)
       setComments([])
       setCommentsError(null)
+      setTransitions([])
+      setPriorities([])
+      setUsers([])
+      setTags([])
       setCommentDraft('')
       optimisticCommentsRef.current = []
       return
@@ -191,6 +211,23 @@ export default function YouTrackIssueWorkspace({
           setIssueLoading(false)
         }
       })
+
+    void Promise.all([
+      youtrackListTransitions(providerSettings, issue.idReadable, issue.instanceId),
+      youtrackListPriorities(providerSettings, issue.instanceId),
+      youtrackListAssignableUsers(providerSettings, issue.idReadable, issue.instanceId),
+      youtrackListIssueTags(providerSettings, issue.idReadable, issue.instanceId)
+    ])
+      .then(([nextTransitions, nextPriorities, nextUsers, nextTags]) => {
+        if (requestId !== requestIdRef.current) {
+          return
+        }
+        setTransitions(nextTransitions)
+        setPriorities(nextPriorities)
+        setUsers(nextUsers)
+        setTags(nextTags)
+      })
+      .catch(() => {})
 
     void loadComments(issue, requestId)
   }, [issue, loadComments, providerSettings])
@@ -426,22 +463,133 @@ export default function YouTrackIssueWorkspace({
             </div>
 
             <div className="flex flex-wrap items-center gap-x-3 gap-y-2 border-b border-border/60 px-4 py-2.5">
-              {displayed.status ? (
-                <span
-                  className={cn(
-                    'inline-flex items-center gap-1.5 rounded-full border px-2 py-0.5 text-[11px] font-medium',
-                    youtrackStatusClass(displayed.status.resolved)
-                  )}
+              <Popover>
+                <PopoverTrigger asChild>
+                  <button
+                    type="button"
+                    disabled={pendingField === 'status' || transitions.length === 0}
+                    className={cn(
+                      'inline-flex items-center gap-1.5 rounded-full border px-2 py-0.5 text-[11px] font-medium transition hover:opacity-80 disabled:opacity-50',
+                      displayed.status
+                        ? youtrackStatusClass(displayed.status.resolved)
+                        : 'border-border/30 bg-muted/20 text-muted-foreground'
+                    )}
+                  >
+                    {displayed.status?.name ?? 'No status'}
+                    {pendingField === 'status' ? (
+                      <LoaderCircle className="size-3 animate-spin" />
+                    ) : null}
+                  </button>
+                </PopoverTrigger>
+                <PopoverContent
+                  className="popover-scroll-content scrollbar-sleek w-52 p-1"
+                  align="start"
                 >
-                  {displayed.status.name}
-                </span>
-              ) : null}
-              <span className="rounded-md px-1.5 py-0.5 text-[11px] text-muted-foreground">
-                {displayed.priority?.name ?? 'No priority'}
-              </span>
-              <span className="flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[11px] text-muted-foreground">
-                {displayed.assignee?.displayName ?? 'Unassigned'}
-              </span>
+                  {transitions.map((transition) => (
+                    <button
+                      key={transition.id}
+                      type="button"
+                      onClick={() =>
+                        void mutateIssue(
+                          'status',
+                          { stateName: transition.to.name },
+                          { status: transition.to }
+                        )
+                      }
+                      className="flex w-full items-center rounded-sm px-2 py-1.5 text-left text-[12px] hover:bg-accent"
+                    >
+                      {transition.name}
+                    </button>
+                  ))}
+                </PopoverContent>
+              </Popover>
+
+              <Popover>
+                <PopoverTrigger asChild>
+                  <button
+                    type="button"
+                    disabled={pendingField === 'priority'}
+                    className="rounded-md px-1.5 py-0.5 text-[11px] text-muted-foreground transition hover:bg-muted/40 disabled:opacity-50"
+                  >
+                    {displayed.priority?.name ??
+                      translate('auto.components.YouTrackIssueWorkspace.noPriority', 'No priority')}
+                    {pendingField === 'priority' ? (
+                      <LoaderCircle className="ml-1 inline size-3 animate-spin" />
+                    ) : null}
+                  </button>
+                </PopoverTrigger>
+                <PopoverContent
+                  className="popover-scroll-content scrollbar-sleek w-48 p-1"
+                  align="start"
+                >
+                  <button
+                    type="button"
+                    onClick={() =>
+                      void mutateIssue('priority', { priorityName: null }, { priority: undefined })
+                    }
+                    className="flex w-full items-center rounded-sm px-2 py-1.5 text-left text-[12px] hover:bg-accent"
+                  >
+                    {translate('auto.components.YouTrackIssueWorkspace.noPriority', 'No priority')}
+                  </button>
+                  {priorities.map((priority) => (
+                    <button
+                      key={priority.name}
+                      type="button"
+                      onClick={() =>
+                        void mutateIssue('priority', { priorityName: priority.name }, { priority })
+                      }
+                      className="flex w-full items-center rounded-sm px-2 py-1.5 text-left text-[12px] hover:bg-accent"
+                    >
+                      {priority.name}
+                    </button>
+                  ))}
+                </PopoverContent>
+              </Popover>
+
+              <Popover>
+                <PopoverTrigger asChild>
+                  <button
+                    type="button"
+                    disabled={pendingField === 'assignee'}
+                    className="flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[11px] text-muted-foreground transition hover:bg-muted/40 disabled:opacity-50"
+                  >
+                    {displayed.assignee?.displayName ??
+                      translate('auto.components.YouTrackIssueWorkspace.addAssignee', '+ Assignee')}
+                    {pendingField === 'assignee' ? (
+                      <LoaderCircle className="size-3 animate-spin" />
+                    ) : null}
+                  </button>
+                </PopoverTrigger>
+                <PopoverContent
+                  className="popover-scroll-content scrollbar-sleek w-56 p-1"
+                  align="start"
+                >
+                  <button
+                    type="button"
+                    onClick={() =>
+                      void mutateIssue('assignee', { assigneeId: null }, { assignee: undefined })
+                    }
+                    className="flex w-full items-center rounded-sm px-2 py-1.5 text-left text-[12px] hover:bg-accent"
+                  >
+                    {translate('auto.components.YouTrackIssueWorkspace.unassigned', 'Unassigned')}
+                  </button>
+                  {users.map((user) => (
+                    <button
+                      key={user.id}
+                      type="button"
+                      onClick={() =>
+                        void mutateIssue('assignee', { assigneeId: user.id }, { assignee: user })
+                      }
+                      className="flex w-full items-center gap-2 rounded-sm px-2 py-1.5 text-left text-[12px] hover:bg-accent"
+                    >
+                      {user.avatarUrl ? (
+                        <img src={user.avatarUrl} alt="" className="size-5 rounded-full" />
+                      ) : null}
+                      <span className="truncate">{user.displayName}</span>
+                    </button>
+                  ))}
+                </PopoverContent>
+              </Popover>
             </div>
 
             <div className="grid min-h-0 flex-1 grid-cols-1 xl:grid-cols-[minmax(0,1fr)_228px]">
@@ -501,6 +649,71 @@ export default function YouTrackIssueWorkspace({
                     </p>
                   )}
                 </section>
+
+                {tags.length > 0 ? (
+                  <section className="border-b border-border/40 px-4 py-4">
+                    <div className="mb-2 text-[11px] font-medium text-muted-foreground">
+                      {translate('auto.components.YouTrackIssueWorkspace.tags', 'Tags')}
+                    </div>
+                    <div className="flex flex-wrap gap-2">
+                      {tags.map((tag) => (
+                        <div
+                          key={tag.id}
+                          className="inline-flex items-center gap-1.5 rounded-full border border-border/50 bg-muted/30 px-2 py-1 text-[11px]"
+                        >
+                          {tag.displayName}
+                          <button
+                            type="button"
+                            onClick={async () => {
+                              if (pendingField) {
+                                return
+                              }
+                              setPendingField(`tag-remove-${tag.id}`)
+                              try {
+                                const result = await youtrackRemoveIssueTag(
+                                  providerSettings,
+                                  displayed.idReadable,
+                                  tag.id,
+                                  instanceId
+                                )
+                                if (result.ok) {
+                                  setTags(tags.filter((t) => t.id !== tag.id))
+                                } else {
+                                  toast.error(
+                                    result.error ||
+                                      translate(
+                                        'auto.components.YouTrackIssueWorkspace.failedToRemoveTag',
+                                        'Failed to remove tag.'
+                                      )
+                                  )
+                                }
+                              } catch (error) {
+                                toast.error(
+                                  error instanceof Error
+                                    ? error.message
+                                    : translate(
+                                        'auto.components.YouTrackIssueWorkspace.failedToRemoveTag',
+                                        'Failed to remove tag.'
+                                      )
+                                )
+                              } finally {
+                                setPendingField(null)
+                              }
+                            }}
+                            disabled={pendingField === `tag-remove-${tag.id}`}
+                            className="ml-0.5 text-muted-foreground hover:text-foreground disabled:opacity-50"
+                          >
+                            {pendingField === `tag-remove-${tag.id}` ? (
+                              <LoaderCircle className="size-3 animate-spin" />
+                            ) : (
+                              '×'
+                            )}
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  </section>
+                ) : null}
 
                 <section className="px-4 py-4">
                   <div className="mb-3 flex items-center justify-between gap-3">
