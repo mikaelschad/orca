@@ -337,13 +337,14 @@ export type FolderWorkspace = {
 }
 
 export type FolderWorkspaceLinkedTask = {
-  provider: 'github' | 'gitlab' | 'linear' | 'jira'
+  provider: 'github' | 'gitlab' | 'linear' | 'jira' | 'youtrack'
   type: 'issue' | 'pr' | 'mr'
   number: number
   title: string
   url: string
   linearIdentifier?: string
   jiraIdentifier?: string
+  youtrackIdentifier?: string
   repoId?: string
 }
 
@@ -1842,6 +1843,25 @@ export type {
   JiraViewer
 } from './jira-types'
 
+export type {
+  YouTrackComment,
+  YouTrackConnectArgs,
+  YouTrackConnectionStatus,
+  YouTrackCreateIssueArgs,
+  YouTrackCreateIssueResult,
+  YouTrackInstance,
+  YouTrackInstanceSelection,
+  YouTrackIssue,
+  YouTrackIssueFilter,
+  YouTrackIssueUpdate,
+  YouTrackMutationResult,
+  YouTrackPriority,
+  YouTrackProject,
+  YouTrackStatus,
+  YouTrackUser,
+  YouTrackViewer
+} from './youtrack-types'
+
 /**
  * GitHub API rate-limit buckets surfaced in the TaskPage header so users can
  * see remaining budget before they hit the wall. `core` = REST (5000/hr),
@@ -2747,6 +2767,9 @@ export type GlobalSettings = {
   /** Why: one-shot migration guard so Jira becomes visible for existing
    *  profiles once, without re-adding it after a later deliberate opt-out. */
   visibleTaskProvidersDefaultedForJira: boolean
+  /** Why: one-shot migration guard so YouTrack becomes visible for existing
+   *  profiles once, without re-adding it after a later deliberate opt-out. */
+  visibleTaskProvidersDefaultedForYoutrack: boolean
   /** Why: persists the user's repo selection in the cross-repo tasks view.
    *  `null` means sticky-all — every eligible repo is selected, including
    *  repos added in future sessions, so the "All repos" label stays
@@ -3130,6 +3153,8 @@ export type TaskResumeState = {
   }
   jiraPreset?: 'assigned' | 'reported' | 'all' | 'done'
   jiraQuery?: string
+  youtrackPreset?: 'assigned' | 'reported' | 'all' | 'unresolved'
+  youtrackQuery?: string
 }
 
 export type RightSidebarTab =

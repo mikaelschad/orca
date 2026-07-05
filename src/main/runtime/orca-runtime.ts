@@ -99,6 +99,11 @@ import type {
   JiraIssueFilter,
   JiraIssueUpdate,
   JiraSiteSelection,
+  YouTrackConnectArgs,
+  YouTrackCreateIssueArgs,
+  YouTrackInstanceSelection,
+  YouTrackIssueFilter,
+  YouTrackIssueUpdate,
   LinearIssueUpdate,
   LinearProjectSummary,
   LinearWorkspaceSelection,
@@ -527,6 +532,23 @@ import {
   searchIssues as searchJiraIssues,
   updateIssue as updateJiraIssue
 } from '../jira/issues'
+import {
+  connect as connectYouTrack,
+  disconnect as disconnectYouTrack,
+  getStatus as getYouTrackStatus,
+  selectInstance as selectYouTrackInstance,
+  testConnection as testYouTrackConnection
+} from '../youtrack/client'
+import {
+  addIssueComment as addYouTrackIssueComment,
+  createIssue as createYouTrackIssue,
+  getIssue as getYouTrackIssue,
+  getIssueComments as getYouTrackIssueComments,
+  listIssues as listYouTrackIssues,
+  listProjects as listYouTrackProjects,
+  searchIssues as searchYouTrackIssues,
+  updateIssue as updateYouTrackIssue
+} from '../youtrack/issues'
 import {
   clearProjectItemFieldValue,
   getProjectViewTable,
@@ -21991,6 +22013,84 @@ export class OrcaRuntimeService {
 
   jiraListTransitions(key: string, siteId?: string): ReturnType<typeof listJiraTransitions> {
     return listJiraTransitions(key, siteId)
+  }
+
+  // ── YouTrack integration ──
+
+  youtrackConnect(args: YouTrackConnectArgs): ReturnType<typeof connectYouTrack> {
+    return connectYouTrack(args)
+  }
+
+  youtrackDisconnect(instanceId?: string): { ok: true } {
+    disconnectYouTrack(instanceId)
+    return { ok: true }
+  }
+
+  youtrackSelectInstance(
+    instanceId: YouTrackInstanceSelection
+  ): ReturnType<typeof getYouTrackStatus> {
+    return selectYouTrackInstance(instanceId)
+  }
+
+  youtrackStatus(): ReturnType<typeof getYouTrackStatus> {
+    return getYouTrackStatus()
+  }
+
+  youtrackTestConnection(instanceId?: string): ReturnType<typeof testYouTrackConnection> {
+    return testYouTrackConnection(instanceId)
+  }
+
+  youtrackSearchIssues(
+    query: string,
+    limit = 30,
+    instanceId?: YouTrackInstanceSelection
+  ): ReturnType<typeof searchYouTrackIssues> {
+    return searchYouTrackIssues(query, Math.min(Math.max(1, limit), 100), instanceId)
+  }
+
+  youtrackListIssues(
+    filter?: YouTrackIssueFilter,
+    limit = 30,
+    instanceId?: YouTrackInstanceSelection
+  ): ReturnType<typeof listYouTrackIssues> {
+    return listYouTrackIssues(filter, Math.min(Math.max(1, limit), 100), instanceId)
+  }
+
+  youtrackCreateIssue(args: YouTrackCreateIssueArgs): ReturnType<typeof createYouTrackIssue> {
+    return createYouTrackIssue(args)
+  }
+
+  youtrackGetIssue(id: string, instanceId?: string): ReturnType<typeof getYouTrackIssue> {
+    return getYouTrackIssue(id, instanceId)
+  }
+
+  youtrackUpdateIssue(
+    id: string,
+    updates: YouTrackIssueUpdate,
+    instanceId?: string
+  ): ReturnType<typeof updateYouTrackIssue> {
+    return updateYouTrackIssue(id, updates, instanceId)
+  }
+
+  youtrackAddIssueComment(
+    id: string,
+    body: string,
+    instanceId?: string
+  ): ReturnType<typeof addYouTrackIssueComment> {
+    return addYouTrackIssueComment(id, body, instanceId)
+  }
+
+  youtrackIssueComments(
+    id: string,
+    instanceId?: string
+  ): ReturnType<typeof getYouTrackIssueComments> {
+    return getYouTrackIssueComments(id, instanceId)
+  }
+
+  youtrackListProjects(
+    instanceId?: YouTrackInstanceSelection
+  ): ReturnType<typeof listYouTrackProjects> {
+    return listYouTrackProjects(instanceId)
   }
 
   // ── Browser automation ──

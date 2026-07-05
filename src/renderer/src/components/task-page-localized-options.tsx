@@ -2,6 +2,7 @@ import React from 'react'
 import { Github, Gitlab, LayoutGrid, List } from 'lucide-react'
 
 import { JiraIcon } from '@/components/icons/JiraIcon'
+import { YouTrackIcon } from '@/components/icons/YouTrackIcon'
 import { createLocalizedCatalog } from '@/i18n/localized-catalog'
 import { translate } from '@/i18n/i18n'
 import { getTaskPresetQuery } from '@/lib/new-workspace'
@@ -27,6 +28,9 @@ export type SourceOption = {
 
 export type JiraPresetId = 'assigned' | 'reported' | 'all' | 'done'
 export type JiraPreset = { id: JiraPresetId; label: string }
+
+export type YouTrackPresetId = 'assigned' | 'reported' | 'all' | 'unresolved'
+export type YouTrackPreset = { id: YouTrackPresetId; label: string }
 
 export type GitHubModeButton = { id: GitHubTaskKind | 'project'; label: string }
 
@@ -124,6 +128,11 @@ export const getSourceOptions = createLocalizedCatalog((): SourceOption[] => [
     id: 'jira',
     label: translate('auto.components.TaskPage.9cd11ba218', 'Jira'),
     Icon: ({ className }) => <JiraIcon className={className} />
+  },
+  {
+    id: 'youtrack',
+    label: translate('auto.components.TaskPage.youtrack_source_label', 'YouTrack'),
+    Icon: ({ className }) => <YouTrackIcon className={className} />
   }
 ])
 
@@ -132,6 +141,22 @@ export const getJiraPresets = createLocalizedCatalog((): JiraPreset[] => [
   { id: 'reported', label: translate('auto.components.TaskPage.bd9965df51', 'Reported') },
   { id: 'all', label: translate('auto.components.TaskPage.4b6e40e42c', 'All Open') },
   { id: 'done', label: translate('auto.components.TaskPage.18451e99df', 'Done') }
+])
+
+export const getYouTrackPresets = createLocalizedCatalog((): YouTrackPreset[] => [
+  {
+    id: 'assigned',
+    label: translate('auto.components.TaskPage.youtrack_preset_assigned', 'Assigned')
+  },
+  {
+    id: 'reported',
+    label: translate('auto.components.TaskPage.youtrack_preset_reported', 'Reported')
+  },
+  {
+    id: 'unresolved',
+    label: translate('auto.components.TaskPage.youtrack_preset_unresolved', 'Unresolved')
+  },
+  { id: 'all', label: translate('auto.components.TaskPage.youtrack_preset_all', 'All') }
 ])
 
 export const getGitHubModeButtons = createLocalizedCatalog((): GitHubModeButton[] => [

@@ -176,6 +176,26 @@ export const getIntegrationsPaneSearchEntries = createLocalizedCatalog(() => [
   },
   {
     title: translate(
+      'auto.components.settings.integrations.search.7b73d55d41',
+      'YouTrack Integration'
+    ),
+    description: translate(
+      'auto.components.settings.integrations.search.6517b5e558',
+      'Connect a YouTrack instance or update its permanent token.'
+    ),
+    keywords: [
+      translate('auto.components.settings.integrations.search.ead13991b8', 'youtrack'),
+      translate('auto.components.settings.integrations.search.c469091bd8', 'jetbrains'),
+      translate('auto.components.settings.integrations.search.33180e8c10', 'self-hosted'),
+      translate('auto.components.settings.integrations.search.c450244ad7', 'integration'),
+      translate('auto.components.settings.integrations.search.ebe69810ce', 'permanent token'),
+      translate('auto.components.settings.integrations.search.20540996ef', 'credentials'),
+      translate('auto.components.settings.integrations.search.3c3d3d8ffa', 'connect'),
+      translate('auto.components.settings.integrations.search.a626990bd2', 'disconnect')
+    ]
+  },
+  {
+    title: translate(
       'auto.components.settings.integrations.search.b027b4b318',
       'Linear Integration'
     ),

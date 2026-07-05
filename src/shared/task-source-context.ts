@@ -8,7 +8,7 @@ import {
 } from './execution-host'
 import type { GlobalSettings, ProjectProviderIdentity, Repo } from './types'
 
-export type TaskProvider = 'github' | 'gitlab' | 'linear' | 'jira'
+export type TaskProvider = 'github' | 'gitlab' | 'linear' | 'jira' | 'youtrack'
 
 export type GitHubTaskProviderIdentity = ProjectProviderIdentity & {
   provider: 'github'
@@ -37,11 +37,19 @@ export type JiraTaskProviderIdentity = {
   projectKey?: string | null
 }
 
+export type YouTrackTaskProviderIdentity = {
+  provider: 'youtrack'
+  instanceId?: string | null
+  baseUrl?: string | null
+  projectShortName?: string | null
+}
+
 export type TaskProviderIdentity =
   | GitHubTaskProviderIdentity
   | GitLabTaskProviderIdentity
   | LinearTaskProviderIdentity
   | JiraTaskProviderIdentity
+  | YouTrackTaskProviderIdentity
 
 export type TaskSourceContext = {
   kind: 'task-source'
@@ -182,6 +190,7 @@ function normalizeTaskProvider(value: string): TaskProvider | null {
     case 'gitlab':
     case 'linear':
     case 'jira':
+    case 'youtrack':
       return value
     default:
       return null
@@ -203,6 +212,28 @@ function normalizeNonEmptyString(value: string | null | undefined): string | nul
   return trimmed ? trimmed : null
 }
 
+export function getTaskProviderIdentityLabel(
+  identity: TaskProviderIdentity | null | undefined
+): string | null {
+  if (!identity) {
+    return null
+  }
+  switch (identity.provider) {
+    case 'github':
+      return `${identity.owner}/${identity.repo}`
+    case 'gitlab':
+      return identity.namespace && identity.project
+        ? `${identity.namespace}/${identity.project}`
+        : (identity.projectId ?? null)
+    case 'linear':
+      return identity.workspaceName ?? identity.workspaceId ?? null
+    case 'jira':
+      return identity.siteUrl ?? identity.siteId ?? null
+    case 'youtrack':
+      return identity.baseUrl ?? identity.instanceId ?? null
+  }
+}
+
 function providerIdentityCachePart(identity: TaskProviderIdentity | null | undefined): string {
   if (!identity) {
     return ''
@@ -216,6 +247,10 @@ function providerIdentityCachePart(identity: TaskProviderIdentity | null | undef
       return [identity.workspaceId, identity.teamId ?? identity.teamKey].filter(Boolean).join('/')
     case 'jira':
       return [identity.siteId ?? identity.siteUrl, identity.projectKey].filter(Boolean).join('/')
+    case 'youtrack':
+      return [identity.instanceId ?? identity.baseUrl, identity.projectShortName]
+        .filter(Boolean)
+        .join('/')
   }
 }
 

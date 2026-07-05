@@ -1,7 +1,12 @@
 import type { StateCreator } from 'zustand'
 import type { AppState } from '../types'
 import { findWorktreeById } from './worktree-helpers'
-import type { GitHubWorkItem, JiraIssue, LinearIssue } from '../../../../shared/types'
+import type {
+  GitHubWorkItem,
+  JiraIssue,
+  LinearIssue,
+  YouTrackIssue
+} from '../../../../shared/types'
 import type { GitLabWorkItem } from '../../../../shared/gitlab-types'
 import {
   getTaskSourceCacheScope,
@@ -45,6 +50,12 @@ export type WorktreeNavHistoryTaskDetailEntry =
       kind: 'task-detail'
       source: 'jira'
       issue: JiraIssue
+      sourceContext?: TaskSourceContext | null
+    }
+  | {
+      kind: 'task-detail'
+      source: 'youtrack'
+      issue: YouTrackIssue
       sourceContext?: TaskSourceContext | null
     }
 export type WorktreeNavHistoryViewEntry =
@@ -125,6 +136,13 @@ function getHistoryEntryKey(entry: WorktreeNavHistoryEntry): string {
         ? getTaskSourceCacheScope(entry.sourceContext)
         : 'legacy'
     return `view:task-detail:jira:${sourceScope}:${entry.issue.siteId ?? 'selected'}:${entry.issue.key}`
+  }
+  if (entry.source === 'youtrack') {
+    const sourceScope =
+      entry.sourceContext?.provider === 'youtrack'
+        ? getTaskSourceCacheScope(entry.sourceContext)
+        : 'legacy'
+    return `view:task-detail:youtrack:${sourceScope}:${entry.issue.instanceId ?? 'selected'}:${entry.issue.idReadable}`
   }
   const sourceScope =
     entry.sourceContext?.provider === 'linear'

@@ -258,6 +258,9 @@
         },
         "linear": {
           "37d36984d0": "더 새로운 요청이 있어 Linear 연결 요청을 건너뛰었습니다."
+        },
+        "youtrack": {
+          "connectionSuperseded": "YouTrack connection was superseded by a newer request."
         }
       }
     },
@@ -1458,8 +1461,8 @@
         "be8cf68d9f": "이슈 보기",
         "67662ade50": "프로젝트 이슈",
         "6244a02f46": "Linear에서 열기",
-        "606a85c774": "열기",
-        "5e8061b088": "{{value0}} {{value1}}에서 워크스페이스 시작",
+        "606a85c774": "Open {{value0}} in YouTrack",
+        "5e8061b088": "Start workspace from {{value0}}",
         "592a55611b": "더 많은 팀을 선택하거나 새로고침해 보세요. 팀 필터는 현재 가져온 이슈 세트에 적용됩니다.",
         "618107fab3": "선택한 팀과 일치하는 가져온 이슈가 없습니다",
         "903c7af49f": "Linear 이슈를 찾을 수 없습니다.",
@@ -1699,7 +1702,25 @@
         "searchIssues": "이슈 검색",
         "useIssueNumber": "이슈 #{{value0}} 사용",
         "noMatchingIssuesLoaded": "일치하는 이슈를 불러오지 않았습니다.",
-        "editReviewersWithCurrent": "리뷰어 편집: {{value0}}"
+        "editReviewersWithCurrent": "리뷰어 편집: {{value0}}",
+        "19f9b58293": "Open in YouTrack",
+        "2e14bec3e4": "No YouTrack issues found",
+        "a8c3f2d7e8": "YouTrack issues",
+        "bbe32625d0": "Hide YouTrack",
+        "b7aa714439": "Connect YouTrack",
+        "fdee3c7769": "Browse, edit, and start work from YouTrack issues directly from here.",
+        "6560de32b8": "Connect your YouTrack instance",
+        "9aada64eb1": "YouTrack search, e.g. project: ABC #Unresolved",
+        "34d10e1f6f": "Refresh YouTrack issues",
+        "23f77a3fcf": "All YouTrack instances",
+        "986e2ae7f0": "Failed to switch YouTrack instance.",
+        "youtrack_source_label": "YouTrack",
+        "youtrack_preset_assigned": "Assigned",
+        "youtrack_preset_reported": "Reported",
+        "youtrack_preset_unresolved": "Unresolved",
+        "youtrack_preset_all": "All",
+        "youtrack_start_workspace_from_aria": "Start workspace from {{value0}}",
+        "youtrack_open_in_youtrack_aria": "Open {{value0}} in YouTrack"
       },
       "Terminal": {
         "73768427cf": "닫기",
@@ -6376,7 +6397,9 @@
           "dd67a1b6e1": "작업 소스 선택기 및 사이드바 바로가기에 GitLab을 표시합니다.",
           "7c5d7fdc20": "GitLab",
           "1db47236cd": "작업 소스 선택기 및 사이드바 바로가기에 GitHub를 표시합니다.",
-          "e14063e727": "GitHub"
+          "e14063e727": "GitHub",
+          "youtrack_label": "YouTrack",
+          "youtrack_description": "Show YouTrack in the Tasks source picker and sidebar shortcuts."
         },
         "TerminalAppearanceSection": {
           "a14a427ae4": "창 구분선의 두께입니다.",
@@ -7528,7 +7551,12 @@
             "41ccade05c": "gh",
             "b79c21bd42": "GitHub",
             "7166b9090c": "gh CLI를 통한 GitHub 인증.",
-            "f16e41cc72": "GitHub 연동"
+            "f16e41cc72": "GitHub 연동",
+            "ebe69810ce": "permanent token",
+            "c469091bd8": "jetbrains",
+            "ead13991b8": "youtrack",
+            "6517b5e558": "Connect a YouTrack instance or update its permanent token.",
+            "7b73d55d41": "YouTrack Integration"
           }
         },
         "jira": {
@@ -8711,6 +8739,24 @@
           "description": "repo 소유 온디맨드 환경에 대한 설정 제어 및 워크스페이스 실행 대상을 표시합니다.",
           "toggleLabel": "워크스페이스별 환경 전환"
         },
+        "youtrack": {
+          "integration": {
+            "card": {
+              "85c5e8952b": "Re-check",
+              "73dc21abc7": "Disconnect {{value0}}",
+              "111f13a625": "YouTrack is connected for this runtime. Re-check if the connected instance list looks stale.",
+              "42a879d06a": "Each connected YouTrack instance has one token stored by the active runtime.",
+              "10a63dff43": "Test",
+              "f9f81a10ff": "Testing...",
+              "07c14512b3": "Verified",
+              "bb42469593": "Connect YouTrack",
+              "8d9803037d": "Add YouTrack instance",
+              "3c9fe0f2ef": "Browse, create, and start work from YouTrack issues.",
+              "3ff0fee7e7": "Checking YouTrack access before showing setup actions.",
+              "fdbadc57a4": "{{value0}} instance{{value1}} connected",
+              "disconnect_all": "Disconnect"
+            }
+          }
         "SourceControlActionRepoOverrideNote": {
           "agent": "Agent",
           "agentArgs": "CLI arguments",
@@ -12308,6 +12354,45 @@
         "contextMenu": {
           "copy": "복사"
         }
+      },
+      "youtrack": {
+        "connect": {
+          "dialog": {
+            "9854731a42": "Connect",
+            "6df80085c7": "Verifying…",
+            "a0c6f661e3": "Cancel",
+            "2af68aabd7": "Create a permanent token in your YouTrack profile under Account Security → Tokens.",
+            "74fe9d55b1": "perm:...",
+            "ea2d419867": "Permanent token",
+            "9e7ff67d23": "https://youtrack.example.com",
+            "b2bcb01a8d": "YouTrack URL",
+            "b125541728": "Use your YouTrack URL and a permanent token to browse issues.",
+            "298b4b57a7": "Connect YouTrack instance"
+          }
+        }
+      },
+      "YouTrackIssueWorkspace": {
+        "4ff0ec17e7": "Comment",
+        "d1493d5625": "Add a YouTrack comment...",
+        "6809673e1e": "Start workspace",
+        "5fc395c32a": "No comments yet.",
+        "974e15ef29": "Retry",
+        "65656f6549": "Comments",
+        "a325f4ecf3": "No description provided.",
+        "0dd9c68cd5": "Title",
+        "a3257376a2": "Close",
+        "0a78ac85f5": "Close YouTrack issue preview",
+        "029fa1548e": "Preview, edit, and start work from the selected issue.",
+        "080462ec6e": "Copy prompt",
+        "2b53725da1": "Copy suggested branch name",
+        "e4cc5f1e33": "Copy ID",
+        "7ec70614a2": "Copy URL",
+        "704c9d5bb7": "Open in YouTrack",
+        "d2c46439cf": "Failed to add comment.",
+        "c4a28ce57d": "Comment is too large to submit safely.",
+        "220c5f00b7": "Failed to update YouTrack issue.",
+        "5a267e1d47": "Failed to copy {{value0}}",
+        "c432b957b7": "{{value0}} copied"
       }
     },
     "i18n": {

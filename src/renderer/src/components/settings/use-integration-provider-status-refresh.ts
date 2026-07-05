@@ -11,8 +11,11 @@ export function useIntegrationProviderStatusRefresh(): void {
   const linearStatusContextKey = useAppStore((s) => s.linearStatusContextKey)
   const jiraStatusChecked = useAppStore((s) => s.jiraStatusChecked)
   const jiraStatusContextKey = useAppStore((s) => s.jiraStatusContextKey)
+  const youtrackStatusChecked = useAppStore((s) => s.youtrackStatusChecked)
+  const youtrackStatusContextKey = useAppStore((s) => s.youtrackStatusContextKey)
   const checkLinearConnection = useAppStore((s) => s.checkLinearConnection)
   const checkJiraConnection = useAppStore((s) => s.checkJiraConnection)
+  const checkYouTrackConnection = useAppStore((s) => s.checkYouTrackConnection)
   const refreshPreflightStatus = useAppStore((s) => s.refreshPreflightStatus)
   const expectedPreflightContextKey = useAppStore((s) =>
     localPreflightContextKey(getLocalPreflightContext(s))
@@ -21,6 +24,7 @@ export function useIntegrationProviderStatusRefresh(): void {
   const preflightStatusCurrent = preflightStatusContextKey === expectedPreflightContextKey
   const linearStatusCurrent = linearStatusContextKey === providerRuntimeContextKey
   const jiraStatusCurrent = jiraStatusContextKey === providerRuntimeContextKey
+  const youtrackStatusCurrent = youtrackStatusContextKey === providerRuntimeContextKey
 
   useEffect(() => {
     if (!linearStatusCurrent || !linearStatusChecked) {
@@ -29,15 +33,22 @@ export function useIntegrationProviderStatusRefresh(): void {
     if (!jiraStatusCurrent || !jiraStatusChecked) {
       void checkJiraConnection()
     }
+    if (!youtrackStatusCurrent || !youtrackStatusChecked) {
+      void checkYouTrackConnection()
+    }
     if (!preflightStatusCurrent || !preflightStatusChecked) {
       void refreshPreflightStatus()
     }
   }, [
     checkJiraConnection,
+    checkYouTrackConnection,
     checkLinearConnection,
     jiraStatusChecked,
     jiraStatusCurrent,
     jiraStatusContextKey,
+    youtrackStatusChecked,
+    youtrackStatusCurrent,
+    youtrackStatusContextKey,
     linearStatusChecked,
     linearStatusCurrent,
     linearStatusContextKey,

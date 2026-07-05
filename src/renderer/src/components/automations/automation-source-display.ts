@@ -31,7 +31,7 @@ export function getAutomationSourceDisplay(
   return { label, title }
 }
 
-function getProviderLabel(provider: TaskSourceContext['provider']): string {
+export function getProviderLabel(provider: TaskSourceContext['provider']): string {
   switch (provider) {
     case 'github':
       return 'GitHub'
@@ -41,6 +41,8 @@ function getProviderLabel(provider: TaskSourceContext['provider']): string {
       return 'Linear'
     case 'jira':
       return 'Jira'
+    case 'youtrack':
+      return 'YouTrack'
   }
 }
 
@@ -58,6 +60,8 @@ function getSourceIdentityLabel(sourceContext: TaskSourceContext): string | null
         return identity.workspaceName ?? identity.workspaceId ?? null
       case 'jira':
         return identity.siteUrl ?? identity.siteId ?? null
+      case 'youtrack':
+        return identity.baseUrl ?? identity.instanceId ?? null
     }
   }
   return sourceContext.accountLabel ?? sourceContext.repoId ?? null

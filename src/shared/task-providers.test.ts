@@ -16,7 +16,13 @@ describe('task providers', () => {
   })
 
   it('falls back to all providers when none are visible', () => {
-    expect(normalizeVisibleTaskProviders([])).toEqual(['github', 'gitlab', 'linear', 'jira'])
+    expect(normalizeVisibleTaskProviders([])).toEqual([
+      'github',
+      'gitlab',
+      'linear',
+      'jira',
+      'youtrack'
+    ])
   })
 
   it('restores a valid saved default when provider settings drifted', () => {
@@ -115,5 +121,14 @@ describe('task providers', () => {
         linearConnected: false
       })
     ).toEqual(['github'])
+  })
+
+  it('treats YouTrack as always available, like Jira, so it stays reachable when disconnected', () => {
+    expect(
+      filterAvailableTaskProviders(['youtrack', 'jira'], {
+        gitlabInstalled: false,
+        linearConnected: false
+      })
+    ).toEqual(['youtrack', 'jira'])
   })
 })
