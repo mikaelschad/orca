@@ -776,7 +776,9 @@ setWorktreeNavViewActivator((entry) => {
         openLinearIssue: undefined,
         openLinearSourceContext: undefined,
         openJiraIssue: undefined,
-        openJiraSourceContext: undefined
+        openJiraSourceContext: undefined,
+        openYouTrackIssue: undefined,
+        openYouTrackSourceContext: undefined
       }
     }))
     return
@@ -796,7 +798,9 @@ setWorktreeNavViewActivator((entry) => {
         openLinearIssue: undefined,
         openLinearSourceContext: undefined,
         openJiraIssue: undefined,
-        openJiraSourceContext: undefined
+        openJiraSourceContext: undefined,
+        openYouTrackIssue: undefined,
+        openYouTrackSourceContext: undefined
       }
     }))
     return
@@ -817,7 +821,9 @@ setWorktreeNavViewActivator((entry) => {
         openLinearIssue: undefined,
         openLinearSourceContext: undefined,
         openJiraIssue: undefined,
-        openJiraSourceContext: undefined
+        openJiraSourceContext: undefined,
+        openYouTrackIssue: undefined,
+        openYouTrackSourceContext: undefined
       }
     }))
     return
@@ -837,7 +843,31 @@ setWorktreeNavViewActivator((entry) => {
         openLinearIssue: undefined,
         openLinearSourceContext: undefined,
         openJiraIssue: entry.issue,
-        openJiraSourceContext: entry.sourceContext
+        openJiraSourceContext: entry.sourceContext,
+        openYouTrackIssue: undefined,
+        openYouTrackSourceContext: undefined
+      }
+    }))
+    return
+  }
+  if (entry.source === 'youtrack') {
+    useAppStore.setState((state) => ({
+      activeView: 'tasks',
+      githubTaskDrawerWorkItem: null,
+      taskPageData: {
+        ...state.taskPageData,
+        taskSource: 'youtrack',
+        openGitHubWorkItem: undefined,
+        openGitHubSourceContext: undefined,
+        openGitHubInitialTab: undefined,
+        openGitLabWorkItem: undefined,
+        openGitLabSourceContext: undefined,
+        openLinearIssue: undefined,
+        openLinearSourceContext: undefined,
+        openJiraIssue: undefined,
+        openJiraSourceContext: undefined,
+        openYouTrackIssue: entry.issue,
+        openYouTrackSourceContext: entry.sourceContext
       }
     }))
     return
@@ -856,7 +886,9 @@ setWorktreeNavViewActivator((entry) => {
       openLinearIssue: entry.issue,
       openLinearSourceContext: entry.sourceContext,
       openJiraIssue: undefined,
-      openJiraSourceContext: undefined
+      openJiraSourceContext: undefined,
+      openYouTrackIssue: undefined,
+      openYouTrackSourceContext: undefined
     }
   }))
 })

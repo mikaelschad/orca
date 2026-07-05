@@ -1623,6 +1623,71 @@ const api = {
       ipcRenderer.invoke('jira:listTransitions', args)
   },
 
+  youtrack: {
+    connect: (args: {
+      baseUrl: string
+      token: string
+    }): Promise<{ ok: true; viewer: unknown } | { ok: false; error: string }> =>
+      ipcRenderer.invoke('youtrack:connect', args),
+
+    disconnect: (args?: { instanceId?: string }): Promise<void> =>
+      ipcRenderer.invoke('youtrack:disconnect', args),
+
+    selectInstance: (args: { instanceId: string }): Promise<unknown> =>
+      ipcRenderer.invoke('youtrack:selectInstance', args),
+
+    status: (): Promise<unknown> => ipcRenderer.invoke('youtrack:status'),
+
+    testConnection: (args?: {
+      instanceId?: string
+    }): Promise<{ ok: true; viewer: unknown } | { ok: false; error: string }> =>
+      ipcRenderer.invoke('youtrack:testConnection', args),
+
+    searchIssues: (args: {
+      query: string
+      limit?: number
+      instanceId?: string
+    }): Promise<unknown[]> => ipcRenderer.invoke('youtrack:searchIssues', args),
+
+    listIssues: (args?: {
+      filter?: 'assigned' | 'reported' | 'all' | 'unresolved'
+      limit?: number
+      instanceId?: string
+    }): Promise<unknown[]> => ipcRenderer.invoke('youtrack:listIssues', args),
+
+    getIssue: (args: { id: string; instanceId?: string }): Promise<unknown> =>
+      ipcRenderer.invoke('youtrack:getIssue', args),
+
+    createIssue: (args: {
+      instanceId?: string
+      projectId: string
+      title: string
+      description?: string
+    }): Promise<
+      { ok: true; id: string; idReadable: string; url: string } | { ok: false; error: string }
+    > => ipcRenderer.invoke('youtrack:createIssue', args),
+
+    updateIssue: (args: {
+      id: string
+      updates: unknown
+      instanceId?: string
+    }): Promise<{ ok: true } | { ok: false; error: string }> =>
+      ipcRenderer.invoke('youtrack:updateIssue', args),
+
+    addIssueComment: (args: {
+      id: string
+      body: string
+      instanceId?: string
+    }): Promise<{ ok: true; id: string } | { ok: false; error: string }> =>
+      ipcRenderer.invoke('youtrack:addIssueComment', args),
+
+    issueComments: (args: { id: string; instanceId?: string }): Promise<unknown[]> =>
+      ipcRenderer.invoke('youtrack:issueComments', args),
+
+    listProjects: (args?: { instanceId?: string }): Promise<unknown[]> =>
+      ipcRenderer.invoke('youtrack:listProjects', args)
+  },
+
   starNag: {
     onShow: (
       callback: (payload?: { mode?: 'gh' | 'web'; surface?: 'card' | 'toast' }) => void

@@ -27,7 +27,8 @@ import type {
   WorktreeCardMode,
   WorkspaceHostOrder,
   WorkspaceHostScope,
-  VisibleWorkspaceHostIds
+  VisibleWorkspaceHostIds,
+  YouTrackIssue
 } from '../../../../shared/types'
 import type { GitLabWorkItem } from '../../../../shared/gitlab-types'
 import type { LaunchSource } from '../../../../shared/telemetry-events'
@@ -623,6 +624,8 @@ export type UISlice = {
     openLinearSourceContext?: TaskSourceContext | null
     openJiraIssue?: JiraIssue
     openJiraSourceContext?: TaskSourceContext | null
+    openYouTrackIssue?: YouTrackIssue
+    openYouTrackSourceContext?: TaskSourceContext | null
   }
   taskResumeState: TaskResumeState | undefined
   setTaskResumeState: (updates: Partial<TaskResumeState>) => void
@@ -1164,6 +1167,9 @@ export const createUISlice: StateCreator<AppState, [], [], UISlice> = (set, get)
     if (data.openJiraIssue) {
       get().recordFeatureInteraction?.('jira-tasks')
     }
+    if (data.openYouTrackIssue) {
+      get().recordFeatureInteraction?.('youtrack-tasks')
+    }
     // Why: record a Tasks visit in the shared back/forward history so the
     // titlebar Back/Forward buttons can return to Tasks. All task-source
     // variants (github/linear presets) collapse to a single 'tasks' entry;
@@ -1199,7 +1205,14 @@ export const createUISlice: StateCreator<AppState, [], [], UISlice> = (set, get)
                 issue: data.openJiraIssue,
                 sourceContext: data.openJiraSourceContext
               } as const)
-            : null
+            : data.openYouTrackIssue
+              ? ({
+                  kind: 'task-detail',
+                  source: 'youtrack',
+                  issue: data.openYouTrackIssue,
+                  sourceContext: data.openYouTrackSourceContext
+                } as const)
+              : null
     const currentEntry = get().worktreeNavHistory[get().worktreeNavHistoryIndex]
     const currentIsTaskStack =
       currentEntry === 'tasks' ||

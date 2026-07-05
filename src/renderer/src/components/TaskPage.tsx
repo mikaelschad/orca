@@ -200,6 +200,7 @@ import {
 } from '@/components/task-page-cache-selectors'
 import { shouldHideTaskPageListChrome } from '@/components/task-page-list-chrome-visibility'
 import { findTaskPageJiraIssue } from '@/components/task-page-jira-cache-selectors'
+import { findTaskPageYouTrackIssue } from '@/components/task-page-youtrack-cache-selectors'
 import { getRepoBackedTaskEmptyState } from '@/components/task-page-empty-state'
 import {
   getDefaultTaskRepoSelection,
@@ -261,7 +262,8 @@ import type {
   LinearWorkflowState,
   Repo,
   TaskProvider,
-  TaskViewPresetId
+  TaskViewPresetId,
+  YouTrackIssue
 } from '../../../shared/types'
 import type { PreflightStatus } from '../../../preload/api-types'
 import type { GitLabProjectRef } from '../../../shared/gitlab-types'
@@ -3074,14 +3076,20 @@ export default function TaskPage(): React.JSX.Element {
   const searchJiraIssues = useAppStore((s) => s.searchJiraIssues)
   const listJiraIssues = useAppStore((s) => s.listJiraIssues)
   const checkJiraConnection = useAppStore((s) => s.checkJiraConnection)
+  const youtrackStatus = useAppStore((s) => s.youtrackStatus)
+  const youtrackStatusChecked = useAppStore((s) => s.youtrackStatusChecked)
+  const youtrackStatusContextKey = useAppStore((s) => s.youtrackStatusContextKey)
+  const checkYouTrackConnection = useAppStore((s) => s.checkYouTrackConnection)
   const providerRuntimeContextKey = getProviderRuntimeContextKey(settings)
   const providerRuntimeContextKeyRef = useRef(providerRuntimeContextKey)
   providerRuntimeContextKeyRef.current = providerRuntimeContextKey
   const linearStatusCurrent = linearStatusContextKey === providerRuntimeContextKey
   const jiraStatusCurrent = jiraStatusContextKey === providerRuntimeContextKey
+  const youtrackStatusCurrent = youtrackStatusContextKey === providerRuntimeContextKey
   const preflightStatusCurrent = preflightStatusContextKey === expectedPreflightContextKey
   const linearStatusReady = linearStatusCurrent && linearStatusChecked
   const jiraStatusReady = jiraStatusCurrent && jiraStatusChecked
+  const youtrackStatusReady = youtrackStatusCurrent && youtrackStatusChecked
   const linearConnected = linearStatusCurrent && linearStatus.connected
   const jiraConnected = jiraStatusCurrent && jiraStatus.connected
   const submitShortcutLabel = getScreenSubmitShortcutLabel()
@@ -3170,6 +3178,16 @@ export default function TaskPage(): React.JSX.Element {
   const selectedLinearWorkspace =
     selectedLinearWorkspaceId && selectedLinearWorkspaceId !== 'all'
       ? (linearWorkspaces.find((workspace) => workspace.id === selectedLinearWorkspaceId) ?? null)
+      : null
+  const youtrackInstances = youtrackStatus.instances ?? []
+  const selectedYouTrackInstanceId =
+    youtrackStatus.selectedInstanceId ??
+    youtrackStatus.activeInstanceId ??
+    youtrackInstances[0]?.id ??
+    null
+  const selectedYouTrackInstance =
+    selectedYouTrackInstanceId && selectedYouTrackInstanceId !== 'all'
+      ? (youtrackInstances.find((instance) => instance.id === selectedYouTrackInstanceId) ?? null)
       : null
   const jiraSites = jiraStatus.sites ?? []
   const selectedJiraSiteId =
@@ -3466,8 +3484,32 @@ export default function TaskPage(): React.JSX.Element {
       selectedJiraSiteId
     ]
   )
+  const youtrackTaskSourceContext = useMemo(
+    () =>
+      normalizeTaskSourceContext({
+        provider: 'youtrack',
+        projectId: fallbackTaskSourceProjectId,
+        hostId: accountBackedTaskSourceHostId,
+        providerIdentity: {
+          provider: 'youtrack',
+          instanceId:
+            selectedYouTrackInstanceId && selectedYouTrackInstanceId !== 'all'
+              ? selectedYouTrackInstanceId
+              : null,
+          baseUrl: selectedYouTrackInstance?.baseUrl ?? null
+        },
+        accountLabel:
+          selectedYouTrackInstance?.displayName ?? selectedYouTrackInstance?.baseUrl ?? null
+      }),
+    [
+      accountBackedTaskSourceHostId,
+      fallbackTaskSourceProjectId,
+      selectedYouTrackInstance,
+      selectedYouTrackInstanceId
+    ]
+  )
   const accountBackedTaskSourceHostAvailability = useMemo<TaskSourceHostAvailability[]>(() => {
-    if (taskSource !== 'linear' && taskSource !== 'jira') {
+    if (taskSource !== 'linear' && taskSource !== 'jira' && taskSource !== 'youtrack') {
       return []
     }
     const host = hostRegistryById.get(accountBackedTaskSourceHostId)
@@ -3540,6 +3582,13 @@ export default function TaskPage(): React.JSX.Element {
           sourceCount: 1,
           hostLabelById,
           hostAvailability: accountAvailability
+        }) ?? undefined,
+      youtrack:
+        getTaskSourceAvailabilityNotice({
+          providerLabel: labelFor('youtrack'),
+          sourceCount: 1,
+          hostLabelById,
+          hostAvailability: accountAvailability
         }) ?? undefined
     }
   }, [
@@ -3561,7 +3610,7 @@ export default function TaskPage(): React.JSX.Element {
       providerLabel,
       repoContexts: taskSourceRepoContexts,
       hostAvailability:
-        taskSource === 'linear' || taskSource === 'jira'
+        taskSource === 'linear' || taskSource === 'jira' || taskSource === 'youtrack'
           ? accountBackedTaskSourceHostAvailability
           : taskSourceHostAvailability,
       accountHostId: accountBackedTaskSourceHostId,
@@ -3569,10 +3618,13 @@ export default function TaskPage(): React.JSX.Element {
       selectedRepoCount: selectedRepos.length,
       linearWorkspaceName:
         selectedLinearWorkspace?.organizationName ?? selectedLinearWorkspace?.id ?? null,
-      jiraSiteName: selectedJiraSite?.displayName ?? selectedJiraSite?.siteUrl ?? null
+      jiraSiteName: selectedJiraSite?.displayName ?? selectedJiraSite?.siteUrl ?? null,
+      youtrackInstanceName:
+        selectedYouTrackInstance?.displayName ?? selectedYouTrackInstance?.baseUrl ?? null
     })
   }, [
     selectedJiraSite,
+    selectedYouTrackInstance,
     selectedLinearWorkspace,
     selectedRepos.length,
     sourceOptions,
@@ -4209,7 +4261,9 @@ export default function TaskPage(): React.JSX.Element {
         openLinearIssue: undefined,
         openLinearSourceContext: undefined,
         openJiraIssue: undefined,
-        openJiraSourceContext: undefined
+        openJiraSourceContext: undefined,
+        openYouTrackIssue: undefined,
+        openYouTrackSourceContext: undefined
       }
     }))
   }, [clearSelectedLinearIssue, setDialogWorkItem])
@@ -4273,6 +4327,38 @@ export default function TaskPage(): React.JSX.Element {
     },
     [jiraTaskSourceContext, openTaskPage]
   )
+
+  const [selectedYouTrackIssueKey, setSelectedYouTrackIssueKey] = useState<string | null>(null)
+  const [selectedYouTrackIssueFallback, setSelectedYouTrackIssueFallback] =
+    useState<YouTrackIssue | null>(null)
+  const youtrackCacheSnapshot = useAppStore(
+    useShallow((s) => ({
+      issueCache: s.youtrackIssueCache,
+      searchCache: s.youtrackSearchCache
+    }))
+  )
+  const cachedSelectedYouTrackIssue = findTaskPageYouTrackIssue(
+    youtrackCacheSnapshot.issueCache,
+    youtrackCacheSnapshot.searchCache,
+    selectedYouTrackIssueKey,
+    {
+      sourceContext: youtrackTaskSourceContext,
+      instanceId:
+        selectedYouTrackIssueFallback?.instanceId ?? pageData.openYouTrackIssue?.instanceId ?? null
+    }
+  )
+  const selectedYouTrackIssue = selectedYouTrackIssueKey
+    ? (cachedSelectedYouTrackIssue ?? selectedYouTrackIssueFallback)
+    : null
+
+  const setSelectedYouTrackIssue = useCallback((issue: YouTrackIssue | null) => {
+    setSelectedYouTrackIssueKey(issue?.idReadable ?? null)
+    setSelectedYouTrackIssueFallback(issue)
+  }, [])
+
+  useEffect(() => {
+    setSelectedYouTrackIssue(pageData.openYouTrackIssue ?? null)
+  }, [pageData.openYouTrackIssue, setSelectedYouTrackIssue])
 
   // Linear tab state
   const [linearMode, setLinearMode] = useState<LinearMode>('issues')
@@ -7053,12 +7139,18 @@ export default function TaskPage(): React.JSX.Element {
     if (!jiraStatusReady) {
       void checkJiraConnection()
     }
+    if (!youtrackStatusReady) {
+      void checkYouTrackConnection()
+    }
   }, [
     checkJiraConnection,
+    checkYouTrackConnection,
     checkLinearConnection,
     expectedPreflightContextKey,
     jiraStatusContextKey,
     jiraStatusReady,
+    youtrackStatusContextKey,
+    youtrackStatusReady,
     linearStatusContextKey,
     linearStatusReady,
     providerRuntimeContextKey,
@@ -7810,6 +7902,7 @@ export default function TaskPage(): React.JSX.Element {
     hasGitHubDetail: Boolean(dialogWorkItem),
     hasGitLabDetail: Boolean(gitlabDialogItem),
     hasJiraDetail: Boolean(selectedJiraIssue),
+    hasYouTrackDetail: Boolean(selectedYouTrackIssue),
     hasLinearIssueDetail: Boolean(selectedLinearIssue),
     hasLinearProjectContext: Boolean(selectedLinearProject),
     hasLinearViewContext: Boolean(selectedLinearCustomView)

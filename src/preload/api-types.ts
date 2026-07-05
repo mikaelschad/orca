@@ -101,6 +101,15 @@ import type {
   JiraTransition,
   JiraUser,
   JiraViewer,
+  YouTrackComment,
+  YouTrackConnectionStatus,
+  YouTrackCreateIssueArgs,
+  YouTrackInstanceSelection,
+  YouTrackIssue,
+  YouTrackIssueFilter,
+  YouTrackIssueUpdate,
+  YouTrackProject,
+  YouTrackViewer,
   LinearViewer,
   LinearCollectionResult,
   LinearConnectionStatus,
@@ -1841,6 +1850,48 @@ export type PreloadApi = {
       siteId?: string
     }) => Promise<JiraUser[]>
     listTransitions: (args: { key: string; siteId?: string }) => Promise<JiraTransition[]>
+  }
+  youtrack: {
+    connect: (args: {
+      baseUrl: string
+      token: string
+    }) => Promise<{ ok: true; viewer: YouTrackViewer } | { ok: false; error: string }>
+    disconnect: (args?: { instanceId?: string }) => Promise<void>
+    selectInstance: (args: {
+      instanceId: YouTrackInstanceSelection
+    }) => Promise<YouTrackConnectionStatus>
+    status: () => Promise<YouTrackConnectionStatus>
+    testConnection: (args?: {
+      instanceId?: string
+    }) => Promise<{ ok: true; viewer: YouTrackViewer } | { ok: false; error: string }>
+    searchIssues: (args: {
+      query: string
+      limit?: number
+      instanceId?: YouTrackInstanceSelection
+    }) => Promise<YouTrackIssue[]>
+    listIssues: (args?: {
+      filter?: YouTrackIssueFilter
+      limit?: number
+      instanceId?: YouTrackInstanceSelection
+    }) => Promise<YouTrackIssue[]>
+    getIssue: (args: { id: string; instanceId?: string }) => Promise<YouTrackIssue | null>
+    createIssue: (
+      args: YouTrackCreateIssueArgs
+    ) => Promise<
+      { ok: true; id: string; idReadable: string; url: string } | { ok: false; error: string }
+    >
+    updateIssue: (args: {
+      id: string
+      updates: YouTrackIssueUpdate
+      instanceId?: string
+    }) => Promise<{ ok: true } | { ok: false; error: string }>
+    addIssueComment: (args: {
+      id: string
+      body: string
+      instanceId?: string
+    }) => Promise<{ ok: true; id: string } | { ok: false; error: string }>
+    issueComments: (args: { id: string; instanceId?: string }) => Promise<YouTrackComment[]>
+    listProjects: (args?: { instanceId?: YouTrackInstanceSelection }) => Promise<YouTrackProject[]>
   }
   starNag: {
     onShow: (
