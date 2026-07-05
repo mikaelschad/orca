@@ -258,6 +258,9 @@
         },
         "linear": {
           "37d36984d0": "La conexión de Linear fue reemplazada por una solicitud más reciente."
+        },
+        "youtrack": {
+          "connectionSuperseded": "YouTrack connection was superseded by a newer request."
         }
       }
     },
@@ -1458,8 +1461,8 @@
         "be8cf68d9f": "ver issues",
         "67662ade50": "issues del proyecto",
         "6244a02f46": "Abrir en Linear",
-        "606a85c774": "Abierto",
-        "5e8061b088": "Iniciar espacio de trabajo desde {{value0}} {{value1}}",
+        "606a85c774": "Open {{value0}} in YouTrack",
+        "5e8061b088": "Start workspace from {{value0}}",
         "592a55611b": "Prueba a seleccionar más equipos o actualizar; los filtros de equipo se aplican al conjunto de issues obtenido actualmente.",
         "618107fab3": "No hay issues obtenidos que coincidan con los equipos seleccionados.",
         "903c7af49f": "No se encontraron issues de Linear",
@@ -1699,7 +1702,25 @@
         "searchIssues": "Buscar issues",
         "useIssueNumber": "Usar issue #{{value0}}",
         "noMatchingIssuesLoaded": "No se cargaron issues coincidentes.",
-        "editReviewersWithCurrent": "Editar revisores: {{value0}}"
+        "editReviewersWithCurrent": "Editar revisores: {{value0}}",
+        "19f9b58293": "Open in YouTrack",
+        "2e14bec3e4": "No YouTrack issues found",
+        "a8c3f2d7e8": "YouTrack issues",
+        "bbe32625d0": "Hide YouTrack",
+        "b7aa714439": "Connect YouTrack",
+        "fdee3c7769": "Browse, edit, and start work from YouTrack issues directly from here.",
+        "6560de32b8": "Connect your YouTrack instance",
+        "9aada64eb1": "YouTrack search, e.g. project: ABC #Unresolved",
+        "34d10e1f6f": "Refresh YouTrack issues",
+        "23f77a3fcf": "All YouTrack instances",
+        "986e2ae7f0": "Failed to switch YouTrack instance.",
+        "youtrack_source_label": "YouTrack",
+        "youtrack_preset_assigned": "Assigned",
+        "youtrack_preset_reported": "Reported",
+        "youtrack_preset_unresolved": "Unresolved",
+        "youtrack_preset_all": "All",
+        "youtrack_start_workspace_from_aria": "Start workspace from {{value0}}",
+        "youtrack_open_in_youtrack_aria": "Open {{value0}} in YouTrack"
       },
       "Terminal": {
         "73768427cf": "Cerrar",
@@ -6392,7 +6413,9 @@
           "dd67a1b6e1": "Muestra GitLab en el selector de fuentes de Tareas y en los accesos directos de la barra lateral.",
           "7c5d7fdc20": "GitLab",
           "1db47236cd": "Muestra GitHub en el selector de fuentes de Tareas y en los accesos directos de la barra lateral.",
-          "e14063e727": "GitHub"
+          "e14063e727": "GitHub",
+          "youtrack_label": "YouTrack",
+          "youtrack_description": "Show YouTrack in the Tasks source picker and sidebar shortcuts."
         },
         "TerminalAppearanceSection": {
           "a14a427ae4": "Grosor de la línea divisoria del panel.",
@@ -7544,7 +7567,12 @@
             "41ccade05c": "gh",
             "b79c21bd42": "github",
             "7166b9090c": "Autenticación de GitHub a través de la CLI de gh.",
-            "f16e41cc72": "Integración de GitHub"
+            "f16e41cc72": "Integración de GitHub",
+            "ebe69810ce": "permanent token",
+            "c469091bd8": "jetbrains",
+            "ead13991b8": "youtrack",
+            "6517b5e558": "Connect a YouTrack instance or update its permanent token.",
+            "7b73d55d41": "YouTrack Integration"
           }
         },
         "jira": {
@@ -8711,6 +8739,25 @@
         "ephemeralVmsExperimentalSetting": {
           "description": "Muestra controles de configuración y destinos de ejecución de espacios de trabajo para entornos bajo demanda del repositorio.",
           "toggleLabel": "Activar o desactivar entornos por espacio de trabajo"
+        },
+        "youtrack": {
+          "integration": {
+            "card": {
+              "85c5e8952b": "Re-check",
+              "73dc21abc7": "Disconnect {{value0}}",
+              "111f13a625": "YouTrack is connected for this runtime. Re-check if the connected instance list looks stale.",
+              "42a879d06a": "Each connected YouTrack instance has one token stored by the active runtime.",
+              "10a63dff43": "Test",
+              "f9f81a10ff": "Testing...",
+              "07c14512b3": "Verified",
+              "bb42469593": "Connect YouTrack",
+              "8d9803037d": "Add YouTrack instance",
+              "3c9fe0f2ef": "Browse, create, and start work from YouTrack issues.",
+              "3ff0fee7e7": "Checking YouTrack access before showing setup actions.",
+              "fdbadc57a4": "{{value0}} instance{{value1}} connected",
+              "disconnect_all": "Disconnect"
+            }
+          }
         }
       },
       "right": {
@@ -12296,6 +12343,45 @@
         "contextMenu": {
           "copy": "Copiar"
         }
+      },
+      "youtrack": {
+        "connect": {
+          "dialog": {
+            "9854731a42": "Connect",
+            "6df80085c7": "Verifying…",
+            "a0c6f661e3": "Cancel",
+            "2af68aabd7": "Create a permanent token in your YouTrack profile under Account Security → Tokens.",
+            "74fe9d55b1": "perm:...",
+            "ea2d419867": "Permanent token",
+            "9e7ff67d23": "https://youtrack.example.com",
+            "b2bcb01a8d": "YouTrack URL",
+            "b125541728": "Use your YouTrack URL and a permanent token to browse issues.",
+            "298b4b57a7": "Connect YouTrack instance"
+          }
+        }
+      },
+      "YouTrackIssueWorkspace": {
+        "4ff0ec17e7": "Comment",
+        "d1493d5625": "Add a YouTrack comment...",
+        "6809673e1e": "Start workspace",
+        "5fc395c32a": "No comments yet.",
+        "974e15ef29": "Retry",
+        "65656f6549": "Comments",
+        "a325f4ecf3": "No description provided.",
+        "0dd9c68cd5": "Title",
+        "a3257376a2": "Close",
+        "0a78ac85f5": "Close YouTrack issue preview",
+        "029fa1548e": "Preview, edit, and start work from the selected issue.",
+        "080462ec6e": "Copy prompt",
+        "2b53725da1": "Copy suggested branch name",
+        "e4cc5f1e33": "Copy ID",
+        "7ec70614a2": "Copy URL",
+        "704c9d5bb7": "Open in YouTrack",
+        "d2c46439cf": "Failed to add comment.",
+        "c4a28ce57d": "Comment is too large to submit safely.",
+        "220c5f00b7": "Failed to update YouTrack issue.",
+        "5a267e1d47": "Failed to copy {{value0}}",
+        "c432b957b7": "{{value0}} copied"
       }
     },
     "i18n": {

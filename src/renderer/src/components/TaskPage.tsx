@@ -159,7 +159,10 @@ import {
   LinearProjectTable
 } from '@/components/linear-project-view-surfaces'
 import JiraIssueWorkspace from '@/components/JiraIssueWorkspace'
+import YouTrackIssueWorkspace from '@/components/YouTrackIssueWorkspace'
 import { JiraIcon } from '@/components/icons/JiraIcon'
+import { YouTrackIcon } from '@/components/icons/YouTrackIcon'
+import { YouTrackConnectDialog } from '@/components/youtrack-connect-dialog'
 import { cn } from '@/lib/utils'
 import {
   getLinkedWorkItemSuggestedName,
@@ -232,6 +235,10 @@ import {
   createTaskPageJiraLoadFailureState,
   type TaskPageJiraLoadError
 } from '@/components/task-page-jira-load-state'
+import {
+  createTaskPageYouTrackLoadFailureState,
+  type TaskPageYouTrackLoadError
+} from '@/components/task-page-youtrack-load-state'
 import { deriveTaskPagePRCheckSummary } from '@/components/task-page-pr-check-summary'
 import { presentGitHubPRMergeState } from '@/components/github-pr-merge-state'
 import { buildJiraCreateTextAdf } from '@/components/jira-create-adf'
@@ -308,6 +315,7 @@ import {
   getGitLabIssueFilters,
   getGitLabMRFilters,
   getJiraPresets,
+  getYouTrackPresets,
   getLinearDisplayProperties,
   getLinearGroupOptions,
   getLinearModeOptions,
@@ -319,6 +327,7 @@ import {
   type GitLabIssueFilter,
   type GitLabTaskFilter,
   type JiraPresetId,
+  type YouTrackPresetId,
   LinearIcon,
   type LinearDisplayProperty,
   type LinearGroupBy,
@@ -340,6 +349,7 @@ function isGitLabIssueFilter(
 const TASK_SEARCH_DEBOUNCE_MS = 300
 const LINEAR_ITEM_LIMIT = 36
 const JIRA_ITEM_LIMIT = 50
+const YOUTRACK_ITEM_LIMIT = 50
 const PR_CHECKS_EAGER_PREFETCH_LIMIT = 20
 
 const GITHUB_TASK_GRID_CLASS =
@@ -374,6 +384,18 @@ function getJiraIssueWorkspaceSeed(issue: JiraIssue): string {
       number: 0,
       title: `${issue.key} ${issue.title}`,
       jiraIdentifier: issue.key
+    })?.seedName ?? getLinkedWorkItemSuggestedName(issue)
+  )
+}
+
+function getYouTrackIssueWorkspaceSeed(issue: YouTrackIssue): string {
+  return (
+    getLinkedWorkItemWorkspaceName({
+      type: 'issue',
+      provider: 'youtrack',
+      number: 0,
+      title: `${issue.idReadable} ${issue.title}`,
+      youtrackIdentifier: issue.idReadable
     })?.seedName ?? getLinkedWorkItemSuggestedName(issue)
   )
 }
@@ -919,6 +941,12 @@ function getJiraStatusTone(categoryKey: string): string {
     return 'border-sky-500/30 bg-sky-500/10 text-sky-700 dark:text-sky-200'
   }
   return 'border-border/50 bg-muted/40 text-muted-foreground'
+}
+
+function getYouTrackStatusTone(resolved: boolean): string {
+  return resolved
+    ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-200'
+    : 'border-sky-500/30 bg-sky-500/10 text-sky-700 dark:text-sky-200'
 }
 
 function getJiraProjectSelectionKey(project: JiraProject): string {
@@ -3079,6 +3107,9 @@ export default function TaskPage(): React.JSX.Element {
   const youtrackStatus = useAppStore((s) => s.youtrackStatus)
   const youtrackStatusChecked = useAppStore((s) => s.youtrackStatusChecked)
   const youtrackStatusContextKey = useAppStore((s) => s.youtrackStatusContextKey)
+  const selectYouTrackInstance = useAppStore((s) => s.selectYouTrackInstance)
+  const searchYouTrackIssues = useAppStore((s) => s.searchYouTrackIssues)
+  const listYouTrackIssues = useAppStore((s) => s.listYouTrackIssues)
   const checkYouTrackConnection = useAppStore((s) => s.checkYouTrackConnection)
   const providerRuntimeContextKey = getProviderRuntimeContextKey(settings)
   const providerRuntimeContextKeyRef = useRef(providerRuntimeContextKey)
@@ -3092,6 +3123,7 @@ export default function TaskPage(): React.JSX.Element {
   const youtrackStatusReady = youtrackStatusCurrent && youtrackStatusChecked
   const linearConnected = linearStatusCurrent && linearStatus.connected
   const jiraConnected = jiraStatusCurrent && jiraStatus.connected
+  const youtrackConnected = youtrackStatusCurrent && youtrackStatus.connected
   const submitShortcutLabel = getScreenSubmitShortcutLabel()
   const eligibleRepos = useMemo(() => repos.filter((repo) => isGitRepoKind(repo)), [repos])
 
@@ -3223,6 +3255,7 @@ export default function TaskPage(): React.JSX.Element {
   const githubModeButtons = getGitHubModeButtons()
   const linearModeOptions = getLinearModeOptions()
   const jiraPresets = getJiraPresets()
+  const youtrackPresets = getYouTrackPresets()
   const gitLabIssueFilters = getGitLabIssueFilters()
   const gitLabMRFilters = getGitLabMRFilters()
   const linearViewOptions = getLinearViewOptions()
@@ -3641,11 +3674,11 @@ export default function TaskPage(): React.JSX.Element {
     return getTaskSourceAvailabilityNotice({
       providerLabel,
       sourceCount:
-        taskSource === 'linear' || taskSource === 'jira'
+        taskSource === 'linear' || taskSource === 'jira' || taskSource === 'youtrack'
           ? 1
           : Math.max(1, taskSourceRepoContexts.length),
       hostAvailability:
-        taskSource === 'linear' || taskSource === 'jira'
+        taskSource === 'linear' || taskSource === 'jira' || taskSource === 'youtrack'
           ? accountBackedTaskSourceHostAvailability
           : taskSourceHostAvailability,
       hostLabelById
@@ -3672,6 +3705,7 @@ export default function TaskPage(): React.JSX.Element {
   const githubSearchPersistReadyRef = useRef(false)
   const linearSearchPersistReadyRef = useRef(false)
   const jiraSearchPersistReadyRef = useRef(false)
+  const youtrackSearchPersistReadyRef = useRef(false)
   const [taskResumeApplied, setTaskResumeApplied] = useState(false)
 
   // Why: pageData.taskSource changes when the user clicks a specific source
@@ -4350,6 +4384,22 @@ export default function TaskPage(): React.JSX.Element {
   const selectedYouTrackIssue = selectedYouTrackIssueKey
     ? (cachedSelectedYouTrackIssue ?? selectedYouTrackIssueFallback)
     : null
+  const youtrackDetailSourceContext = useMemo(() => {
+    if (
+      selectedYouTrackIssue &&
+      pageData.openYouTrackSourceContext?.provider === 'youtrack' &&
+      pageData.openYouTrackIssue?.idReadable === selectedYouTrackIssue.idReadable &&
+      pageData.openYouTrackIssue.instanceId === selectedYouTrackIssue.instanceId
+    ) {
+      return pageData.openYouTrackSourceContext
+    }
+    return youtrackTaskSourceContext
+  }, [
+    youtrackTaskSourceContext,
+    pageData.openYouTrackIssue,
+    pageData.openYouTrackSourceContext,
+    selectedYouTrackIssue
+  ])
 
   const setSelectedYouTrackIssue = useCallback((issue: YouTrackIssue | null) => {
     setSelectedYouTrackIssueKey(issue?.idReadable ?? null)
@@ -4359,6 +4409,20 @@ export default function TaskPage(): React.JSX.Element {
   useEffect(() => {
     setSelectedYouTrackIssue(pageData.openYouTrackIssue ?? null)
   }, [pageData.openYouTrackIssue, setSelectedYouTrackIssue])
+
+  const openYouTrackDetailPage = useCallback(
+    (issue: YouTrackIssue) => {
+      openTaskPage(
+        {
+          taskSource: 'youtrack',
+          openYouTrackIssue: issue,
+          openYouTrackSourceContext: youtrackTaskSourceContext
+        },
+        { recordTasksInteraction: false }
+      )
+    },
+    [youtrackTaskSourceContext, openTaskPage]
+  )
 
   // Linear tab state
   const [linearMode, setLinearMode] = useState<LinearMode>('issues')
@@ -4557,6 +4621,17 @@ export default function TaskPage(): React.JSX.Element {
   const [activeJiraPreset, setActiveJiraPreset] = useState<JiraPresetId>('assigned')
   const [jiraRefreshNonce, setJiraRefreshNonce] = useState(0)
 
+  // YouTrack tab state
+  const [youtrackIssues, setYouTrackIssues] = useState<YouTrackIssue[]>([])
+  const [youtrackLoading, setYouTrackLoading] = useState(false)
+  const [youtrackError, setYouTrackError] = useState<TaskPageYouTrackLoadError | null>(null)
+  const [youtrackErrorDetailsOpen, setYouTrackErrorDetailsOpen] = useState(false)
+  const [youtrackSearchInput, setYouTrackSearchInput] = useState('')
+  const [appliedYouTrackSearch, setAppliedYouTrackSearch] = useState('')
+  const [activeYouTrackPreset, setActiveYouTrackPreset] = useState<YouTrackPresetId>('assigned')
+  const [youtrackRefreshNonce, setYouTrackRefreshNonce] = useState(0)
+  const [youtrackConnectOpen, setYouTrackConnectOpen] = useState(false)
+
   useEffect(() => {
     if (taskResumeAppliedRef.current || !persistedUIReady || !settings) {
       return
@@ -4597,6 +4672,12 @@ export default function TaskPage(): React.JSX.Element {
     setActiveJiraPreset(jiraPreset)
     setJiraSearchInput(jiraQuery)
     setAppliedJiraSearch(jiraQuery)
+
+    const youtrackPreset = taskResumeState?.youtrackPreset ?? 'assigned'
+    const youtrackQuery = taskResumeState?.youtrackQuery ?? ''
+    setActiveYouTrackPreset(youtrackPreset)
+    setYouTrackSearchInput(youtrackQuery)
+    setAppliedYouTrackSearch(youtrackQuery)
 
     // Why: settings and persisted UI hydrate asynchronously. Apply the restored
     // Tasks context exactly once so later source/filter clicks remain local.
@@ -5514,6 +5595,28 @@ export default function TaskPage(): React.JSX.Element {
           ) ?? issue
       ),
     [jiraIssues, jiraCacheSnapshot.issueCache, jiraCacheSnapshot.searchCache, jiraTaskSourceContext]
+  )
+
+  const displayedYouTrackIssues = useMemo(
+    () =>
+      youtrackIssues.map(
+        (issue) =>
+          findTaskPageYouTrackIssue(
+            youtrackCacheSnapshot.issueCache,
+            youtrackCacheSnapshot.searchCache,
+            issue.idReadable,
+            {
+              sourceContext: youtrackTaskSourceContext,
+              instanceId: issue.instanceId
+            }
+          ) ?? issue
+      ),
+    [
+      youtrackIssues,
+      youtrackCacheSnapshot.issueCache,
+      youtrackCacheSnapshot.searchCache,
+      youtrackTaskSourceContext
+    ]
   )
 
   // New Linear project dialog state
@@ -7746,6 +7849,115 @@ export default function TaskPage(): React.JSX.Element {
     taskSource
   ])
 
+  useEffect(() => {
+    if (!taskResumeApplied) {
+      return
+    }
+    const timeout = window.setTimeout(() => {
+      setAppliedYouTrackSearch(youtrackSearchInput)
+    }, TASK_SEARCH_DEBOUNCE_MS)
+    return () => window.clearTimeout(timeout)
+  }, [youtrackSearchInput, taskResumeApplied])
+
+  useEffect(() => {
+    if (!taskResumeApplied) {
+      return
+    }
+    if (!youtrackSearchPersistReadyRef.current) {
+      youtrackSearchPersistReadyRef.current = true
+      return
+    }
+    setTaskResumeState({ youtrackQuery: appliedYouTrackSearch.trim() })
+  }, [appliedYouTrackSearch, setTaskResumeState, taskResumeApplied])
+
+  useEffect(() => {
+    if (!taskResumeApplied) {
+      return
+    }
+    if (taskSource !== 'youtrack') {
+      return
+    }
+    if (!youtrackConnected) {
+      return
+    }
+
+    let cancelled = false
+    setYouTrackLoading(true)
+    setYouTrackError(null)
+    setYouTrackErrorDetailsOpen(false)
+
+    const trimmed = appliedYouTrackSearch.trim()
+    const request =
+      trimmed.length > 0
+        ? searchYouTrackIssues(trimmed, YOUTRACK_ITEM_LIMIT, {
+            sourceContext: youtrackTaskSourceContext
+          })
+        : listYouTrackIssues(activeYouTrackPreset, YOUTRACK_ITEM_LIMIT, {
+            sourceContext: youtrackTaskSourceContext
+          })
+
+    void request
+      .then((issues) => {
+        if (cancelled) {
+          return
+        }
+        setYouTrackIssues(issues)
+        setYouTrackLoading(false)
+      })
+      .catch((err) => {
+        if (cancelled) {
+          return
+        }
+        const failureState = createTaskPageYouTrackLoadFailureState(err)
+        setYouTrackIssues(failureState.issues)
+        setYouTrackError(failureState.error)
+        setYouTrackLoading(false)
+      })
+
+    return () => {
+      cancelled = true
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [
+    taskSource,
+    youtrackConnected,
+    selectedYouTrackInstanceId,
+    appliedYouTrackSearch,
+    activeYouTrackPreset,
+    youtrackRefreshNonce,
+    taskResumeApplied,
+    youtrackTaskSourceContext
+  ])
+
+  useEffect(() => {
+    if (!taskResumeApplied || taskSource !== 'youtrack') {
+      return
+    }
+    if (!youtrackConnected || displayedYouTrackIssues.length === 0) {
+      if (selectedYouTrackIssueKey !== null) {
+        setSelectedYouTrackIssueKey(null)
+      }
+      if (selectedYouTrackIssueFallback !== null) {
+        setSelectedYouTrackIssueFallback(null)
+      }
+      return
+    }
+    if (
+      selectedYouTrackIssueKey &&
+      !displayedYouTrackIssues.some((issue) => issue.idReadable === selectedYouTrackIssueKey)
+    ) {
+      setSelectedYouTrackIssueKey(null)
+      setSelectedYouTrackIssueFallback(null)
+    }
+  }, [
+    displayedYouTrackIssues,
+    youtrackConnected,
+    selectedYouTrackIssueFallback,
+    selectedYouTrackIssueKey,
+    taskResumeApplied,
+    taskSource
+  ])
+
   // Why: for Linear issues the "Use" flow opens the composer with the issue
   // info adapted to the LinkedWorkItemSummary shape. Linear identifiers are
   // strings (e.g. "ENG-123") so we use 0 as a placeholder number since the
@@ -7868,6 +8080,34 @@ export default function TaskPage(): React.JSX.Element {
       openComposerForJiraItem(issue)
     },
     [openComposerForJiraItem]
+  )
+
+  const openComposerForYouTrackItem = useCallback(
+    (issue: YouTrackIssue): void => {
+      const linkedWorkItem: LinkedWorkItemSummary = {
+        type: 'issue',
+        provider: 'youtrack',
+        number: 0,
+        title: `${issue.idReadable} ${issue.title}`,
+        url: issue.url,
+        youtrackIdentifier: issue.idReadable
+      }
+      openModal('new-workspace-composer', {
+        linkedWorkItem,
+        taskSourceContext: youtrackTaskSourceContext,
+        prefilledName: getYouTrackIssueWorkspaceSeed(issue),
+        telemetrySource: 'sidebar'
+      })
+    },
+    [youtrackTaskSourceContext, openModal]
+  )
+
+  const handleUseYouTrackItem = useCallback(
+    (issue: YouTrackIssue): void => {
+      useAppStore.getState().recordFeatureInteraction('youtrack-tasks')
+      openComposerForYouTrackItem(issue)
+    },
+    [openComposerForYouTrackItem]
   )
 
   const handleJiraConnect = useCallback(async (): Promise<void> => {
@@ -8097,6 +8337,47 @@ export default function TaskPage(): React.JSX.Element {
                             {jiraSites.map((site) => (
                               <SelectItem key={site.id} value={site.id}>
                                 {site.displayName}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      ) : null}
+                    </div>
+                  ) : null}
+                  {taskSource === 'youtrack' && youtrackConnected ? (
+                    <div className="flex items-center gap-2">
+                      {youtrackInstances.length > 1 ? (
+                        <Select
+                          value={selectedYouTrackInstanceId ?? undefined}
+                          onValueChange={(value) => {
+                            setSelectedYouTrackIssueKey(null)
+                            setSelectedYouTrackIssueFallback(null)
+                            setYouTrackIssues([])
+                            setYouTrackError(null)
+                            setYouTrackLoading(true)
+                            void selectYouTrackInstance(value).catch(() => {
+                              toast.error(
+                                translate(
+                                  'auto.components.TaskPage.986e2ae7f0',
+                                  'Failed to switch YouTrack instance.'
+                                )
+                              )
+                            })
+                          }}
+                        >
+                          <SelectTrigger className="h-8 w-[220px] rounded-md border-border/50 bg-muted/50 text-xs font-medium shadow-sm">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="all">
+                              {translate(
+                                'auto.components.TaskPage.23f77a3fcf',
+                                'All YouTrack instances'
+                              )}
+                            </SelectItem>
+                            {youtrackInstances.map((instance) => (
+                              <SelectItem key={instance.id} value={instance.id}>
+                                {instance.displayName}
                               </SelectItem>
                             ))}
                           </SelectContent>
@@ -8830,6 +9111,116 @@ export default function TaskPage(): React.JSX.Element {
                               setAppliedJiraSearch('')
                               setTaskResumeState({ jiraQuery: '' })
                               setJiraRefreshNonce((n) => n + 1)
+                            }}
+                            className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground transition hover:text-foreground"
+                          >
+                            <X className="size-4" />
+                          </button>
+                        ) : null}
+                      </div>
+                    </div>
+                  </div>
+                ) : taskSource === 'youtrack' && youtrackConnected ? (
+                  <div className="rounded-md rounded-b-none border border-border/50 bg-muted/50 px-3 pt-2 pb-0 shadow-sm">
+                    <div className="flex flex-wrap items-center justify-between gap-3">
+                      <div className="flex flex-wrap gap-2">
+                        {youtrackPresets.map((preset) => {
+                          const active = !youtrackSearchInput && activeYouTrackPreset === preset.id
+                          return (
+                            <button
+                              key={preset.id}
+                              type="button"
+                              onClick={() => {
+                                setYouTrackSearchInput('')
+                                setAppliedYouTrackSearch('')
+                                setActiveYouTrackPreset(preset.id)
+                                setTaskResumeState({ youtrackPreset: preset.id, youtrackQuery: '' })
+                                setYouTrackRefreshNonce((n) => n + 1)
+                              }}
+                              className={cn(
+                                'rounded-md border px-2 py-1 text-xs transition',
+                                active
+                                  ? 'border-border/50 bg-foreground/90 text-background backdrop-blur-md'
+                                  : 'border-border/50 bg-transparent text-foreground hover:bg-muted/50'
+                              )}
+                            >
+                              {preset.label}
+                            </button>
+                          )
+                        })}
+                      </div>
+                      <div className="flex shrink-0 items-center gap-2">
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <Button
+                              variant="outline"
+                              size="icon"
+                              onClick={() => setYouTrackRefreshNonce((n) => n + 1)}
+                              disabled={youtrackLoading}
+                              aria-label={translate(
+                                'auto.components.TaskPage.34d10e1f6f',
+                                'Refresh YouTrack issues'
+                              )}
+                              className="border-border/50 bg-transparent hover:bg-muted/50 backdrop-blur-md supports-[backdrop-filter]:bg-transparent"
+                            >
+                              {youtrackLoading ? (
+                                <LoaderCircle className="size-4 animate-spin" />
+                              ) : (
+                                <RefreshCw className="size-4" />
+                              )}
+                            </Button>
+                          </TooltipTrigger>
+                          <TooltipContent side="bottom" sideOffset={6}>
+                            {translate(
+                              'auto.components.TaskPage.34d10e1f6f',
+                              'Refresh YouTrack issues'
+                            )}
+                          </TooltipContent>
+                        </Tooltip>
+                      </div>
+                    </div>
+                    <div className="mt-3 flex items-center gap-3">
+                      <div className="relative min-w-[320px] flex-1">
+                        <Search className="pointer-events-none absolute left-2.5 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground" />
+                        <Input
+                          value={youtrackSearchInput}
+                          onChange={(e) => setYouTrackSearchInput(e.target.value)}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter') {
+                              if (
+                                shouldSuppressEnterSubmit(
+                                  { isComposing: e.nativeEvent.isComposing, shiftKey: e.shiftKey },
+                                  false
+                                )
+                              ) {
+                                return
+                              }
+                              e.preventDefault()
+                              const trimmed = youtrackSearchInput.trim()
+                              setYouTrackSearchInput(trimmed)
+                              setAppliedYouTrackSearch(trimmed)
+                              setTaskResumeState({ youtrackQuery: trimmed })
+                              setYouTrackRefreshNonce((n) => n + 1)
+                            }
+                          }}
+                          placeholder={translate(
+                            'auto.components.TaskPage.9aada64eb1',
+                            'YouTrack search, e.g. project: ABC #Unresolved'
+                          )}
+                          className="h-8 rounded-md border-border/50 bg-background pl-8 pr-8 text-xs"
+                        />
+                        {youtrackSearchInput ? (
+                          <button
+                            type="button"
+                            aria-label={translate(
+                              'auto.components.TaskPage.b797bdd7c3',
+                              'Clear search'
+                            )}
+                            onClick={() => {
+                              setYouTrackSearchInput('')
+                              setAppliedYouTrackSearch('')
+                              setTaskResumeState({ youtrackQuery: '' })
+                              setYouTrackRefreshNonce((n) => n + 1)
                             }}
                             className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground transition hover:text-foreground"
                           >
@@ -10091,6 +10482,303 @@ export default function TaskPage(): React.JSX.Element {
                   onUse={handleUseJiraItem}
                   onClose={closeTaskDetailPage}
                   sourceContext={jiraDetailSourceContext}
+                />
+              </div>
+            )
+          ) : taskSource === 'youtrack' ? (
+            !youtrackStatusReady ? (
+              <div className="mt-4 flex items-center justify-center py-14">
+                <LoaderCircle className="size-5 animate-spin text-muted-foreground" />
+              </div>
+            ) : !youtrackConnected ? (
+              <div className="mt-4 flex flex-col items-center justify-center rounded-md border border-border/50 bg-muted/50 px-6 py-14 text-center shadow-sm">
+                <YouTrackIcon className="mb-4 size-8 text-muted-foreground/60" />
+                <p className="text-base font-medium text-foreground">
+                  {translate(
+                    'auto.components.TaskPage.6560de32b8',
+                    'Connect your YouTrack instance'
+                  )}
+                </p>
+                <p className="mt-2 max-w-sm text-sm text-muted-foreground">
+                  {translate(
+                    'auto.components.TaskPage.fdee3c7769',
+                    'Browse, edit, and start work from YouTrack issues directly from here.'
+                  )}
+                </p>
+                <div className="mt-5 flex flex-wrap items-center justify-center gap-2">
+                  <Button onClick={() => setYouTrackConnectOpen(true)}>
+                    {translate('auto.components.TaskPage.b7aa714439', 'Connect YouTrack')}
+                  </Button>
+                  <Button variant="outline" onClick={() => hideTaskSource('youtrack', 'YouTrack')}>
+                    {translate('auto.components.TaskPage.bbe32625d0', 'Hide YouTrack')}
+                  </Button>
+                </div>
+              </div>
+            ) : (
+              <div className="flex min-h-0 max-h-full flex-col overflow-hidden rounded-md rounded-t-none border border-t-0 border-border/50 bg-background shadow-sm">
+                <div className="flex h-10 flex-none items-center justify-between gap-3 border-b border-border/50 bg-muted/35 px-3">
+                  <div className="min-w-0 text-[11px] font-medium uppercase tracking-[0.12em] text-muted-foreground">
+                    {translate('auto.components.TaskPage.a8c3f2d7e8', 'YouTrack issues')}
+                  </div>
+                  <div className="shrink-0 text-[11px] text-muted-foreground">
+                    {displayedYouTrackIssues.length}{' '}
+                    {translate('auto.components.TaskPage.b7bae28b6a', 'shown')}
+                  </div>
+                </div>
+
+                <div className="grid h-8 flex-none grid-cols-[90px_minmax(0,1fr)_128px_92px_80px] items-center gap-3 border-b border-border/50 bg-muted/25 px-3 text-[11px] font-medium uppercase tracking-[0.08em] text-muted-foreground max-md:!hidden lg:grid-cols-[96px_minmax(0,1.25fr)_132px_120px_136px_96px_64px] xl:grid-cols-[104px_minmax(0,1.45fr)_144px_132px_160px_128px_72px]">
+                  <span>{translate('auto.components.TaskPage.eb10c32872', 'ID')}</span>
+                  <span>{translate('auto.components.TaskPage.b1eaa18ace', 'Issue')}</span>
+                  <span>{translate('auto.components.TaskPage.154b0fa623', 'Status')}</span>
+                  <span>{translate('auto.components.TaskPage.c8d5bec5f7', 'Priority')}</span>
+                  <span className="block max-lg:!hidden">
+                    {translate('auto.components.TaskPage.d2a876ca53', 'Assignee')}
+                  </span>
+                  <span>{translate('auto.components.TaskPage.f362667d55', 'Updated')}</span>
+                  <span />
+                </div>
+
+                <div
+                  className="min-h-0 flex-1 overflow-y-auto scrollbar-sleek"
+                  style={{ scrollbarGutter: 'stable' }}
+                >
+                  {youtrackStatus.credentialError ? (
+                    <div className="border-b border-border px-4 py-4 text-sm text-destructive">
+                      {youtrackStatus.credentialError}
+                    </div>
+                  ) : null}
+                  {!youtrackStatus.credentialError && youtrackError ? (
+                    <TaskPageJiraErrorBanner
+                      error={youtrackError}
+                      open={youtrackErrorDetailsOpen}
+                      onOpenChange={setYouTrackErrorDetailsOpen}
+                    />
+                  ) : null}
+
+                  {youtrackLoading && youtrackIssues.length === 0 ? (
+                    <div className="divide-y divide-border/50">
+                      {Array.from({ length: 6 }).map((_, i) => (
+                        <div key={i} className="px-3 py-3">
+                          <div className="h-4 w-4/5 animate-pulse rounded bg-muted/70" />
+                          <div className="mt-2 h-3 w-3/5 animate-pulse rounded bg-muted/60" />
+                        </div>
+                      ))}
+                    </div>
+                  ) : null}
+
+                  {!youtrackLoading &&
+                  youtrackIssues.length === 0 &&
+                  !youtrackError &&
+                  !youtrackStatus.credentialError ? (
+                    <div className="px-4 py-10 text-center">
+                      <p className="text-sm font-medium text-foreground">
+                        {translate(
+                          'auto.components.TaskPage.2e14bec3e4',
+                          'No YouTrack issues found'
+                        )}
+                      </p>
+                      <p className="mt-2 text-sm text-muted-foreground">
+                        {youtrackSearchInput
+                          ? translate(
+                              'auto.components.TaskPage.2bdefbcac3',
+                              'Try a different search query.'
+                            )
+                          : translate(
+                              'auto.components.TaskPage.94d900518d',
+                              'No issues match the selected preset.'
+                            )}
+                      </p>
+                    </div>
+                  ) : null}
+
+                  <div className="divide-y divide-border/50">
+                    {displayedYouTrackIssues.map((issue) => {
+                      const selected = issue.idReadable === selectedYouTrackIssueKey
+                      const labels = issue.labels.slice(0, 3)
+                      const contextLabel =
+                        selectedYouTrackInstanceId === 'all' && issue.instanceName
+                          ? `${issue.instanceName} / ${issue.project.shortName}`
+                          : issue.project.shortName
+                      return (
+                        <div
+                          key={`${issue.instanceId ?? 'instance'}:${issue.idReadable}`}
+                          role="button"
+                          tabIndex={0}
+                          aria-current={selected ? 'true' : undefined}
+                          data-current={selected ? 'true' : undefined}
+                          onClick={() => openYouTrackDetailPage(issue)}
+                          onKeyDown={(e) => {
+                            if (e.target !== e.currentTarget) {
+                              return
+                            }
+                            if (e.key === 'Enter' || e.key === ' ') {
+                              e.preventDefault()
+                              openYouTrackDetailPage(issue)
+                            }
+                          }}
+                          className={cn(
+                            'group/row grid min-h-12 cursor-pointer grid-cols-[minmax(0,1fr)_auto] items-center gap-3 px-3 py-2 text-left transition hover:bg-accent focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring md:grid-cols-[90px_minmax(0,1fr)_128px_92px_80px] lg:grid-cols-[96px_minmax(0,1.25fr)_132px_120px_136px_96px_64px] xl:grid-cols-[104px_minmax(0,1.45fr)_144px_132px_160px_128px_72px]',
+                            selected && 'bg-accent'
+                          )}
+                        >
+                          <span className="block truncate font-mono text-[12px] text-muted-foreground max-md:!hidden">
+                            {issue.idReadable}
+                          </span>
+
+                          <div className="min-w-0">
+                            <div className="flex min-w-0 items-center gap-2">
+                              <span className="shrink-0 font-mono text-[11px] text-muted-foreground md:hidden">
+                                {issue.idReadable}
+                              </span>
+                              <h3 className="min-w-0 truncate text-[13px] font-medium text-foreground">
+                                {issue.title}
+                              </h3>
+                            </div>
+                            <div className="mt-1 flex min-w-0 items-center gap-1.5 md:!hidden">
+                              {issue.status ? (
+                                <span
+                                  className={cn(
+                                    'inline-flex min-w-0 items-center rounded-full border px-1.5 py-0.5 text-[11px] font-medium',
+                                    getYouTrackStatusTone(issue.status.resolved)
+                                  )}
+                                >
+                                  <span className="truncate">{issue.status.name}</span>
+                                </span>
+                              ) : null}
+                              <span className="shrink-0 text-[11px] text-muted-foreground">
+                                {issue.priority?.name ?? 'No priority'}
+                              </span>
+                              <span className="min-w-0 truncate text-[11px] text-muted-foreground">
+                                {issue.assignee?.displayName ?? 'Unassigned'}
+                              </span>
+                            </div>
+                            <div className="mt-1 flex min-w-0 items-center gap-1 max-lg:!hidden">
+                              <span className="max-w-[160px] truncate text-[10px] text-muted-foreground xl:!hidden">
+                                {contextLabel}
+                              </span>
+                              {labels.map((label) => (
+                                <span
+                                  key={label}
+                                  className="max-w-[140px] truncate rounded-full border border-border/50 bg-muted/35 px-1.5 py-0.5 text-[10px] text-muted-foreground"
+                                >
+                                  {label}
+                                </span>
+                              ))}
+                              {issue.labels.length > labels.length ? (
+                                <span className="text-[10px] text-muted-foreground">
+                                  +{issue.labels.length - labels.length}
+                                </span>
+                              ) : null}
+                            </div>
+                          </div>
+
+                          <div className="flex min-w-0 max-md:!hidden">
+                            {issue.status ? (
+                              <span
+                                className={cn(
+                                  'inline-flex max-w-full items-center rounded-full border px-2 py-0.5 text-[11px] font-medium',
+                                  getYouTrackStatusTone(issue.status.resolved)
+                                )}
+                              >
+                                <span className="truncate">{issue.status.name}</span>
+                              </span>
+                            ) : null}
+                          </div>
+
+                          <span className="block truncate text-[12px] text-muted-foreground max-md:!hidden">
+                            {issue.priority?.name ?? 'No priority'}
+                          </span>
+
+                          <div className="flex min-w-0 items-center gap-2 text-[12px] text-muted-foreground max-lg:!hidden">
+                            {issue.assignee?.avatarUrl ? (
+                              <img
+                                src={issue.assignee.avatarUrl}
+                                alt={issue.assignee.displayName}
+                                className="size-5 shrink-0 rounded-full"
+                              />
+                            ) : (
+                              <span className="flex size-5 shrink-0 items-center justify-center rounded-full border border-border/50 bg-muted/40 text-[10px]">
+                                {issue.assignee?.displayName?.slice(0, 1) ?? '-'}
+                              </span>
+                            )}
+                            <span className="truncate">
+                              {issue.assignee?.displayName ?? 'Unassigned'}
+                            </span>
+                          </div>
+
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <div className="block min-w-0 truncate text-[12px] text-muted-foreground max-md:!hidden">
+                                {formatRelativeTime(issue.updatedAt)}
+                              </div>
+                            </TooltipTrigger>
+                            <TooltipContent side="bottom" sideOffset={6}>
+                              {new Date(issue.updatedAt).toLocaleString()}
+                            </TooltipContent>
+                          </Tooltip>
+
+                          <div className="flex shrink-0 items-center justify-end gap-1 md:opacity-0 md:transition-opacity md:group-hover/row:opacity-100 md:group-focus-within/row:opacity-100">
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <Button
+                                  variant="ghost"
+                                  size="icon-xs"
+                                  onClick={(event) => {
+                                    event.stopPropagation()
+                                    handleUseYouTrackItem(issue)
+                                  }}
+                                  aria-label={translate(
+                                    'auto.components.TaskPage.youtrack_start_workspace_from_aria',
+                                    'Start workspace from {{value0}}',
+                                    { value0: issue.idReadable }
+                                  )}
+                                >
+                                  <ArrowRight className="size-3.5" />
+                                </Button>
+                              </TooltipTrigger>
+                              <TooltipContent side="bottom" sideOffset={6}>
+                                {translate(
+                                  'auto.components.TaskPage.9497f2787c',
+                                  'Start workspace'
+                                )}
+                              </TooltipContent>
+                            </Tooltip>
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <Button
+                                  variant="ghost"
+                                  size="icon-xs"
+                                  onClick={(event) => {
+                                    event.stopPropagation()
+                                    window.api.shell.openUrl(issue.url)
+                                  }}
+                                  aria-label={translate(
+                                    'auto.components.TaskPage.youtrack_open_in_youtrack_aria',
+                                    'Open {{value0}} in YouTrack',
+                                    { value0: issue.idReadable }
+                                  )}
+                                >
+                                  <ExternalLink className="size-3.5" />
+                                </Button>
+                              </TooltipTrigger>
+                              <TooltipContent side="bottom" sideOffset={6}>
+                                {translate(
+                                  'auto.components.TaskPage.19f9b58293',
+                                  'Open in YouTrack'
+                                )}
+                              </TooltipContent>
+                            </Tooltip>
+                          </div>
+                        </div>
+                      )
+                    })}
+                  </div>
+                </div>
+                <YouTrackIssueWorkspace
+                  issue={selectedYouTrackIssue}
+                  onUse={handleUseYouTrackItem}
+                  onClose={closeTaskDetailPage}
+                  sourceContext={youtrackDetailSourceContext}
                 />
               </div>
             )
@@ -12689,6 +13377,8 @@ export default function TaskPage(): React.JSX.Element {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <YouTrackConnectDialog open={youtrackConnectOpen} onOpenChange={setYouTrackConnectOpen} />
     </div>
   )
 }

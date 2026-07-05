@@ -337,13 +337,14 @@ export type FolderWorkspace = {
 }
 
 export type FolderWorkspaceLinkedTask = {
-  provider: 'github' | 'gitlab' | 'linear' | 'jira'
+  provider: 'github' | 'gitlab' | 'linear' | 'jira' | 'youtrack'
   type: 'issue' | 'pr' | 'mr'
   number: number
   title: string
   url: string
   linearIdentifier?: string
   jiraIdentifier?: string
+  youtrackIdentifier?: string
   repoId?: string
 }
 
@@ -3152,6 +3153,8 @@ export type TaskResumeState = {
   }
   jiraPreset?: 'assigned' | 'reported' | 'all' | 'done'
   jiraQuery?: string
+  youtrackPreset?: 'assigned' | 'reported' | 'all' | 'unresolved'
+  youtrackQuery?: string
 }
 
 export type RightSidebarTab =

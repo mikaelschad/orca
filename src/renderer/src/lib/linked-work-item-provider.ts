@@ -25,6 +25,21 @@ function isJiraIssueUrl(url: string): boolean {
   }
 }
 
+// Why: self-hosted YouTrack instances have no shared hostname convention, so
+// detection relies on the `/issue/<PROJECT-123>` path shape common to both
+// self-hosted and Cloud (`*.youtrack.cloud`) instances.
+function isYouTrackIssueUrl(url: string): boolean {
+  try {
+    const parsed = new URL(url)
+    return (
+      /\.youtrack\.cloud$/i.test(parsed.hostname) ||
+      /\/issue\/[A-Za-z][A-Za-z0-9_]*-\d+/i.test(parsed.pathname)
+    )
+  } catch {
+    return false
+  }
+}
+
 export function getLinkedWorkItemProvider(
   item: LinkedWorkItemSummary
 ): NonNullable<LinkedWorkItemSummary['provider']> {
@@ -36,6 +51,9 @@ export function getLinkedWorkItemProvider(
   }
   if (item.jiraIdentifier || isJiraIssueUrl(item.url)) {
     return 'jira'
+  }
+  if (item.youtrackIdentifier || isYouTrackIssueUrl(item.url)) {
+    return 'youtrack'
   }
   if (item.type === 'mr') {
     return 'gitlab'

@@ -313,6 +313,12 @@ const VALID_JIRA_PRESETS = new Set<NonNullable<TaskResumeState['jiraPreset']>>([
   'all',
   'done'
 ])
+const VALID_YOUTRACK_PRESETS = new Set<NonNullable<TaskResumeState['youtrackPreset']>>([
+  'assigned',
+  'reported',
+  'all',
+  'unresolved'
+])
 
 function resolvePaneKeyWorktreeIdFromTabs(state: AppState, paneKey: string): string | null {
   const parsed = parsePaneKey(paneKey)
@@ -520,6 +526,17 @@ function sanitizeTaskResumeState(value: unknown): TaskResumeState | undefined {
   }
   if (typeof input.jiraQuery === 'string') {
     next.jiraQuery = input.jiraQuery
+  }
+  if (
+    typeof input.youtrackPreset === 'string' &&
+    VALID_YOUTRACK_PRESETS.has(
+      input.youtrackPreset as NonNullable<TaskResumeState['youtrackPreset']>
+    )
+  ) {
+    next.youtrackPreset = input.youtrackPreset as NonNullable<TaskResumeState['youtrackPreset']>
+  }
+  if (typeof input.youtrackQuery === 'string') {
+    next.youtrackQuery = input.youtrackQuery
   }
 
   return Object.keys(next).length > 0 ? next : undefined

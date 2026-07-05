@@ -8,6 +8,7 @@ import {
 import { cn } from '@/lib/utils'
 import { JiraIcon } from '@/components/icons/JiraIcon'
 import { LinearIcon } from '@/components/icons/LinearIcon'
+import { YouTrackIcon } from '@/components/icons/YouTrackIcon'
 import { Label } from '../ui/label'
 import { SearchableSetting } from './SearchableSetting'
 import { SettingsSubsectionHeader } from './SettingsFormControls'
@@ -75,6 +76,19 @@ const TASK_PROVIDER_OPTIONS: readonly {
       )
     },
     Icon: ({ className }) => <JiraIcon className={className} />
+  },
+  {
+    id: 'youtrack',
+    get label() {
+      return translate('auto.components.settings.TasksPane.youtrack_label', 'YouTrack')
+    },
+    get description() {
+      return translate(
+        'auto.components.settings.TasksPane.youtrack_description',
+        'Show YouTrack in the Tasks source picker and sidebar shortcuts.'
+      )
+    },
+    Icon: ({ className }) => <YouTrackIcon className={className} />
   }
 ]
 
@@ -123,6 +137,8 @@ export function TasksPane({ settings, updateSettings }: TasksPaneProps): React.J
             'linear',
             'jira',
             'atlassian',
+            'youtrack',
+            'jetbrains',
             'display',
             'hide'
           ]}
