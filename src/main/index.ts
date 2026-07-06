@@ -62,6 +62,7 @@ import {
   patchPackagedProcessPath,
   shouldInstallManagedHooks
 } from './startup/configure-process'
+import { enableRendererHeapHeadroom } from './startup/renderer-heap-headroom'
 import { ensureVirtualDisplayForHeadlessServe } from './startup/ensure-virtual-display'
 import {
   readActiveGpuFallbackMarker,
@@ -99,6 +100,7 @@ import {
 import { ensureWindowsUserDataAclGrant } from './startup/windows-user-data-acl'
 import { shouldQuitWhenAllWindowsClosed } from './startup/window-all-closed-quit-policy'
 import { RateLimitService } from './rate-limits/service'
+import { readMiniMaxSessionCookie } from './minimax/minimax-cookie-store'
 import { getInitialClaudeRateLimitTarget } from './rate-limits/claude-rate-limit-target'
 import { getInitialCodexRateLimitTarget } from './rate-limits/codex-rate-limit-target'
 import {
@@ -118,6 +120,10 @@ import { normalizeClaudeRuntimeSelection } from './claude-accounts/runtime-selec
 import { codexHookService } from './codex/hook-service'
 import { ClaudeAccountService } from './claude-accounts/service'
 import { ClaudeRuntimeAuthService } from './claude-accounts/runtime-auth-service'
+import {
+  attachClaudeLivePtyPersistence,
+  seedLiveClaudePtysFromPersistence
+} from './claude-accounts/live-pty-gate'
 import { StarNagService } from './star-nag/service'
 import { agentHookServer } from './agent-hooks/server'
 import { maybeAutoRenameBranchOnFirstWork } from './agent-hooks/first-work-branch-rename'
@@ -580,6 +586,7 @@ if (hasSingleInstanceLock) {
     platform: process.platform
   })
   configureElectronNetworkCompatibility()
+  enableRendererHeapHeadroom()
   maybeApplyGpuFallbackForThisLaunch()
   if (!gpuFallbackActiveThisLaunch) {
     enableMainProcessGpuFeatures()
@@ -1615,6 +1622,18 @@ app.whenReady().then(async () => {
 
   store = new Store()
   logStartupMilestone('store-loaded')
+  // Why: must run before ClaudeRuntimeAuthService's constructor sync — a Claude
+  // CLI that survived the restart inside the daemon still holds the current
+  // single-use refresh token, and an unguarded early refresh would rotate it
+  // out from under that process (it then shows "Not logged in" mid-session).
+  attachClaudeLivePtyPersistence(store)
+  const persistedClaudePtyIds = store.getClaudeLivePtySessionIds()
+  seedLiveClaudePtysFromPersistence(persistedClaudePtyIds)
+  if (persistedClaudePtyIds.length > 0) {
+    console.log(
+      `[claude-live-pty] Seeded ${persistedClaudePtyIds.length} persisted Claude session id(s) into the refresh gate`
+    )
+  }
   selfHealRuntimeEnvironmentFocus({ store, userDataPath: app.getPath('userData') })
   applyAppIcon(store.getSettings().appIcon)
   if (shouldSuppressDevEducation({ isDev: is.dev })) {
@@ -1683,6 +1702,14 @@ app.whenReady().then(async () => {
     return {
       sessionCookie: settings.opencodeSessionCookie,
       workspaceIdOverride: settings.opencodeWorkspaceId
+    }
+  })
+  rateLimits.setMiniMaxConfigResolver(() => {
+    const settings = store!.getSettings()
+    return {
+      sessionCookie: readMiniMaxSessionCookie() ?? '',
+      groupId: settings.minimaxGroupId,
+      models: settings.minimaxUsageModels
     }
   })
   rateLimits.setGeminiCliOAuthEnabledResolver(() => store!.getSettings().geminiCliOAuthEnabled)
