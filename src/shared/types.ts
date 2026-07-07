@@ -1138,6 +1138,13 @@ export type PRInfo = {
   // of the PR's own commits (behind update-branch/web commits). Cache staleness
   // checks must honor that confirmation without re-querying GitHub.
   confirmedContainedHeadOid?: string
+  // Why: the worktree HEAD OID this merged linked PR was confirmed to have
+  // diverged from (a definite not-contained probe). Head-scoped, not a bare
+  // boolean, so a PR-number-coalesced refresh broadcast cannot clear a sibling
+  // worktree whose own head is still on the PR's line of work. Clearing a
+  // durable linked PR requires this positive signal for that exact head, never
+  // the mere absence of a containment confirmation after a rate-limit/error.
+  headDivergedFromMergedPRAtOid?: string
   /** Target branch name for PR-created worktree compare-base repair. */
   baseRefName?: string
   prRepo?: GitHubRepositoryIdentity
@@ -1180,6 +1187,10 @@ export type GitHubPRRefreshAlias = {
   linkedPRNumber?: number | null
   fallbackPRNumber?: number | null
   fallbackPRSource?: 'explicit' | 'pr-cache' | 'hosted-review' | null
+  // Why: request-time worktree HEAD. Merged branch-matched PRs are only visible
+  // for heads that belong to the PR, and refresh consumers need this snapshot to
+  // clear a durable linked PR once main confirms the head diverged.
+  currentHeadOid?: string | null
 }
 
 export type GitHubPRRefreshCandidate = GitHubPRRefreshAlias & {
@@ -1197,10 +1208,6 @@ export type GitHubPRRefreshCandidate = GitHubPRRefreshAlias & {
   cachedMergeable?: PRMergeableState | null
   cachedMergeStateStatus?: string | null
   localGitOptions?: { wslDistro?: string }
-  // Why: merged branch-matched PRs are only visible for heads that belong to
-  // the PR; without the worktree head, a panel-supplied fallback number would
-  // keep a merged PR alive head-blind after the branch moves on.
-  currentHeadOid?: string | null
 }
 
 export type GitHubPRRefreshSkippedReason =
@@ -2212,6 +2219,11 @@ export type ChangelogData = {
   releasesBehind: number | null
 }
 
+export type UpdateCheckOptions = {
+  includePrerelease?: boolean
+  includePerfPrerelease?: boolean
+}
+
 export type UpdateStatus =
   | { state: 'idle' }
   | { state: 'checking'; userInitiated?: boolean }
@@ -2788,6 +2800,10 @@ export type GlobalSettings = {
   /** Optional workspace ID override for OpenCode Go. When set, skips the
    *  workspaces lookup and fetches usage directly for this workspace. */
   opencodeWorkspaceId: string
+  /** Optional MiniMax group id. When empty, the usage fetcher extracts minimax_group_id_v2 from the cookie. */
+  minimaxGroupId: string
+  /** Comma-separated MiniMax model names to show in the status bar usage window. */
+  minimaxUsageModels: string
   /** Whether to extract OAuth credentials from the local Gemini CLI installation
    *  for rate-limit fetching. Disabled by default for explicit opt-in. */
   geminiCliOAuthEnabled: boolean
@@ -3134,6 +3150,7 @@ export type StatusBarItem =
   | 'gemini'
   | 'opencode-go'
   | 'kimi'
+  | 'minimax'
   | 'ssh'
   | 'resource-usage'
   | 'ports'
@@ -3249,6 +3266,8 @@ export type PersistedUIState = {
   _portsStatusBarDefaultAdded?: boolean
   /** One-shot migration flag for adding the default-on Kimi status item. */
   _kimiStatusBarDefaultAdded?: boolean
+  /** One-shot migration flag for adding the default-on MiniMax status item. */
+  _minimaxStatusBarDefaultAdded?: boolean
   statusBarItems: StatusBarItem[]
   statusBarVisible: boolean
   dismissedUpdateVersion: string | null
@@ -3507,6 +3526,10 @@ export type PersistedState = {
   workspaceSessionsByHostId?: Partial<Record<ExecutionHostId, WorkspaceSessionState>>
   sshTargets: SshTarget[]
   sshRemotePtyLeases: SshRemotePtyLease[]
+  /** Daemon session ids of live local Claude launches. Seeds the Claude
+   *  live-PTY gate on startup so an early OAuth refresh cannot rotate the
+   *  single-use refresh token out from under a still-running daemon CLI. */
+  claudeLivePtySessionIds?: string[]
   migrationUnsupportedPtyEntries: MigrationUnsupportedPtyEntry[]
   legacyPaneKeyAliasEntries: LegacyPaneKeyAliasEntry[]
   automations: Automation[]

@@ -1991,6 +1991,11 @@ function buildWorktreePurgeState(s: AppState, worktreeIds: string[]): Partial<Ap
     ptyIdsByTabId: omitByTabId(s.ptyIdsByTabId),
     runtimePaneTitlesByTabId: omitByTabId(s.runtimePaneTitlesByTabId),
     automaticAgentResumeClaimsByTabId: omitByTabId(s.automaticAgentResumeClaimsByTabId),
+    nativeChatLaunchPromptByTabId: omitByTabId(s.nativeChatLaunchPromptByTabId),
+    // Why: bulk/hydration purge must drop the per-tab pane-expand flags too;
+    // this path never runs terminal teardown, so nothing else evicts them.
+    expandedPaneByTabId: omitByTabId(s.expandedPaneByTabId),
+    canExpandPaneByTabId: omitByTabId(s.canExpandPaneByTabId),
     // Why: these tab/pane-scoped agent-status, unread, and input maps are only
     // cleared on the single removeWorktree path (via shutdownWorktreeTerminals /
     // dropAgentStatusByWorktree / clearPaneForegroundAgentByWorktree, which read
@@ -2290,7 +2295,7 @@ export const createWorktreeSlice: StateCreator<AppState, [], [], WorktreeSlice> 
     }
   },
 
-  fetchAllWorktrees: async () => {
+  fetchAllWorktrees: async (options) => {
     const { repos } = get()
 
     // Why: once the one-shot hydration-time purge has fired, subsequent
@@ -2432,10 +2437,31 @@ export const createWorktreeSlice: StateCreator<AppState, [], [], WorktreeSlice> 
       // Defer; try again on the next fetchAllWorktrees call.
       return
     }
+    if (
+      options?.hydrationPurge === 'defer' ||
+      get().workspaceSessionReady === false ||
+      get().hydrationSucceeded === false
+    ) {
+      // Why: startup first refreshes only local repos so the app can paint
+      // before remote runtime timeouts. Keep the one-shot purge available for
+      // the later all-host refresh, after a clean session hydrate and when
+      // remote worktree ids are known too.
+      return
+    }
     const validIds = new Set<string>()
     // Why: floating is persisted renderer state, but not a repo worktree that
     // authoritative runtime scans can return.
     validIds.add(FLOATING_TERMINAL_WORKTREE_ID)
+    // Why: folder workspaces persist terminal tabs under `folder:<id>` keys,
+    // but authoritative repo scans can never return those synthetic ids.
+    for (const workspace of get().folderWorkspaces ?? []) {
+      validIds.add(folderWorkspaceKey(workspace.id))
+    }
+    for (const key of Object.keys(get().restoredRuntimeHostIdByWorkspaceSessionKey ?? {})) {
+      if (parseWorkspaceKey(key)?.type === 'folder') {
+        validIds.add(key)
+      }
+    }
     for (const result of Object.values(get().detectedWorktreesByRepo)) {
       if (!result.authoritative) {
         continue
@@ -3096,11 +3122,20 @@ export const createWorktreeSlice: StateCreator<AppState, [], [], WorktreeSlice> 
         const nextAutomaticAgentResumeClaimsByTabId = {
           ...s.automaticAgentResumeClaimsByTabId
         }
+        const nextNativeChatLaunchPromptByTabId = { ...s.nativeChatLaunchPromptByTabId }
+        // Why: closeTab deletes these two per-tab maps but removeWorktree missed
+        // them, so a split pane's expand flags outlived its deleted worktree for
+        // the renderer's whole session. Purge them here to match closeTab.
+        const nextExpandedPaneByTabId = { ...s.expandedPaneByTabId }
+        const nextCanExpandPaneByTabId = { ...s.canExpandPaneByTabId }
         for (const tabId of tabIds) {
           delete nextLayouts[tabId]
           delete nextPtyIdsByTabId[tabId]
           delete nextRuntimePaneTitlesByTabId[tabId]
           delete nextAutomaticAgentResumeClaimsByTabId[tabId]
+          delete nextNativeChatLaunchPromptByTabId[tabId]
+          delete nextExpandedPaneByTabId[tabId]
+          delete nextCanExpandPaneByTabId[tabId]
         }
         const nextDeleteState = { ...s.deleteStateByWorktreeId }
         delete nextDeleteState[worktreeId]
@@ -3246,7 +3281,10 @@ export const createWorktreeSlice: StateCreator<AppState, [], [], WorktreeSlice> 
           ptyIdsByTabId: nextPtyIdsByTabId,
           runtimePaneTitlesByTabId: nextRuntimePaneTitlesByTabId,
           automaticAgentResumeClaimsByTabId: nextAutomaticAgentResumeClaimsByTabId,
+          nativeChatLaunchPromptByTabId: nextNativeChatLaunchPromptByTabId,
           terminalLayoutsByTabId: nextLayouts,
+          expandedPaneByTabId: nextExpandedPaneByTabId,
+          canExpandPaneByTabId: nextCanExpandPaneByTabId,
           deleteStateByWorktreeId: nextDeleteState,
           baseStatusByWorktreeId: (() => {
             const nextStatus = { ...s.baseStatusByWorktreeId }

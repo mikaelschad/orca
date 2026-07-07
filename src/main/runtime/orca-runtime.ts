@@ -46,6 +46,8 @@ import { createHash, randomUUID } from 'node:crypto'
 import { homedir } from 'node:os'
 import { isAbsolute, join, resolve } from 'node:path'
 import { mkdir, readFile, readdir, rm, stat } from 'node:fs/promises'
+import { resolveWorktreeCreateBase } from '../worktree-create-base'
+import { resolveWorktreeAddBaseRef } from '../../shared/worktree-base-ref'
 import { OrchestrationDb } from './orchestration/db'
 import { formatMessagesForInjection } from './orchestration/formatter'
 import type {
@@ -191,6 +193,7 @@ import {
   resolveTuiAgentLaunchArgs,
   resolveTuiAgentLaunchEnv
 } from '../../shared/tui-agent-launch-defaults'
+import { resolveLocalWindowsAgentStartupShell } from '../../shared/windows-terminal-shell'
 import {
   getTuiAgentLaunchCommand,
   isTuiAgent,
@@ -609,7 +612,8 @@ import {
   getRemoteDrift,
   getRecentDriftSubjects
 } from '../git/repo'
-import { hasLocalCommitObject } from '../git/commit-object-ref'
+import { hasCommitObjectViaGitExec } from '../git/commit-object-ref'
+import { hasWorktreeBaseCommitRef } from '../git/worktree-base-ref-probe'
 import { resolveLocalGitUsername } from '../git/git-username'
 import {
   listWorktrees,
@@ -812,6 +816,7 @@ type RuntimeStore = {
     agentCmdOverrides?: GlobalSettings['agentCmdOverrides']
     agentDefaultArgs?: GlobalSettings['agentDefaultArgs']
     agentDefaultEnv?: GlobalSettings['agentDefaultEnv']
+    terminalWindowsShell?: GlobalSettings['terminalWindowsShell']
     agentStatusHooksEnabled?: GlobalSettings['agentStatusHooksEnabled']
     defaultTaskSource?: GlobalSettings['defaultTaskSource']
     defaultTaskViewPreset?: GlobalSettings['defaultTaskViewPreset']
@@ -821,6 +826,8 @@ type RuntimeStore = {
     githubProjects?: GlobalSettings['githubProjects']
     experimentalNewWorktreeCardStyle?: GlobalSettings['experimentalNewWorktreeCardStyle']
     compactWorktreeCards?: GlobalSettings['compactWorktreeCards']
+    minimaxGroupId?: GlobalSettings['minimaxGroupId']
+    minimaxUsageModels?: GlobalSettings['minimaxUsageModels']
     gitlabProjects?: GlobalSettings['gitlabProjects']
     experimentalWorktreeSymlinks?: boolean
     mobileAutoRestoreFitMs?: number | null
@@ -907,6 +914,10 @@ type RuntimeLeafRecord = RuntimeSyncedLeaf & {
   tailLinesTotal: number
   preview: string
   waitBlockedAt: number | null
+  // Why: memoized wait scan of the current retained tail so the next PTY chunk
+  // reuses it as its "previous" state instead of rebuilding + rescanning the
+  // full tail. See computeTerminalTailWaitState.
+  tailWaitState?: TerminalTailWaitState
   lastAgentStatus: AgentStatus | null
   // Why: the most recent OSC title observed on this leaf's PTY data. Used by
   // worktree.ps so daemon-hosted terminals (no renderer pushing pane titles)
@@ -974,6 +985,8 @@ type RuntimePtyWorktreeRecord = {
   tailLinesTotal: number
   preview: string
   waitBlockedAt: number | null
+  // Why: memoized wait scan of the current retained tail (see RuntimeLeafRecord).
+  tailWaitState?: TerminalTailWaitState
 }
 
 type TerminalCreateOptions = {
@@ -1991,6 +2004,26 @@ type LayoutQueueEntry = {
   }[]
 }
 
+async function hasLocalWorktreeBaseRef(
+  repoPath: string,
+  baseRef: string,
+  options: { wslDistro?: string } = {}
+): Promise<boolean> {
+  const refExists = (qualifiedRef: string) =>
+    hasWorktreeBaseCommitRef(repoPath, qualifiedRef, options)
+  const resolvedBaseRef = await resolveWorktreeAddBaseRef(baseRef, refExists)
+  if (resolvedBaseRef !== baseRef) {
+    return true
+  }
+  if (baseRef.startsWith('refs/')) {
+    return refExists(baseRef)
+  }
+  return hasCommitObjectViaGitExec(
+    (gitArgs) => gitExecFileAsync(gitArgs, { cwd: repoPath, ...options }),
+    baseRef
+  )
+}
+
 export class OrcaRuntimeService {
   private readonly runtimeId = randomUUID()
   private readonly startedAt = Date.now()
@@ -2400,6 +2433,8 @@ export class OrcaRuntimeService {
     | 'githubProjects'
     | 'experimentalNewWorktreeCardStyle'
     | 'compactWorktreeCards'
+    | 'minimaxGroupId'
+    | 'minimaxUsageModels'
   > {
     if (!this.store?.getSettings) {
       throw new Error('runtime_unavailable')
@@ -2419,7 +2454,9 @@ export class OrcaRuntimeService {
       defaultLinearTeamSelection: settings.defaultLinearTeamSelection ?? null,
       githubProjects: settings.githubProjects,
       experimentalNewWorktreeCardStyle: settings.experimentalNewWorktreeCardStyle === true,
-      compactWorktreeCards: settings.compactWorktreeCards === true
+      compactWorktreeCards: settings.compactWorktreeCards === true,
+      minimaxGroupId: settings.minimaxGroupId ?? '',
+      minimaxUsageModels: settings.minimaxUsageModels ?? 'general'
     }
   }
 
@@ -2439,6 +2476,8 @@ export class OrcaRuntimeService {
       | 'githubProjects'
       | 'experimentalNewWorktreeCardStyle'
       | 'compactWorktreeCards'
+      | 'minimaxGroupId'
+      | 'minimaxUsageModels'
     >
   ): Pick<
     GlobalSettings,
@@ -2456,6 +2495,8 @@ export class OrcaRuntimeService {
     | 'githubProjects'
     | 'experimentalNewWorktreeCardStyle'
     | 'compactWorktreeCards'
+    | 'minimaxGroupId'
+    | 'minimaxUsageModels'
   > {
     if (!this.store?.getSettings || !this.store.updateSettings) {
       throw new Error('runtime_unavailable')
@@ -5260,26 +5301,28 @@ export class OrcaRuntimeService {
       pty.lastOutputAt = at
       const normalized = normalizeTerminalChunk(data, pty.tailPendingAnsi)
       pty.tailPendingAnsi = normalized.pendingAnsi
-      const previousWaitText = buildTerminalWaitText(
-        pty.tailBuffer,
-        pty.tailPartialLine,
-        pty.preview
-      )
+      // Why: the prior chunk's post-append tail is this chunk's pre-append tail,
+      // so its cached wait scan is exact — reuse it instead of rebuilding and
+      // rescanning the full tail. Only a tail-derived state is safe to reuse.
+      const previousWaitState =
+        pty.tailWaitState?.fromTail === true
+          ? pty.tailWaitState
+          : computeTerminalTailWaitState(pty.tailBuffer, pty.tailPartialLine, pty.preview)
       const nextTail = appendNormalizedToTailBuffer(
         pty.tailBuffer,
         pty.tailPartialLine,
         normalized.text,
         pty.tailRedrawCursor
       )
-      if (
-        nextTailHasNewerBlockedReason(
-          previousWaitText,
-          buildTerminalWaitText(nextTail.lines, nextTail.partialLine, pty.preview),
-          normalized.text
-        )
-      ) {
+      const nextWaitState = computeTerminalTailWaitState(
+        nextTail.lines,
+        nextTail.partialLine,
+        pty.preview
+      )
+      if (tailGainedNewerBlockedReason(previousWaitState, nextWaitState, normalized.text)) {
         pty.waitBlockedAt = at
       }
+      pty.tailWaitState = nextWaitState
       ptyTailAfter = nextTail
       pty.tailBuffer = nextTail.lines
       pty.tailPartialLine = nextTail.partialLine
@@ -5358,29 +5401,30 @@ export class OrcaRuntimeService {
         leaf.tailLinesTotal = pty.tailLinesTotal
         leaf.preview = pty.preview
         leaf.waitBlockedAt = pty.waitBlockedAt
+        // Why: the leaf mirrors the PTY tail here, so share the cached wait scan.
+        leaf.tailWaitState = pty.tailWaitState
       } else {
         const normalized = normalizeTerminalChunk(data, leaf.tailPendingAnsi)
         leaf.tailPendingAnsi = normalized.pendingAnsi
-        const previousWaitText = buildTerminalWaitText(
-          leaf.tailBuffer,
-          leaf.tailPartialLine,
-          leaf.preview
-        )
+        const previousWaitState =
+          leaf.tailWaitState?.fromTail === true
+            ? leaf.tailWaitState
+            : computeTerminalTailWaitState(leaf.tailBuffer, leaf.tailPartialLine, leaf.preview)
         const nextTail = appendNormalizedToTailBuffer(
           leaf.tailBuffer,
           leaf.tailPartialLine,
           normalized.text,
           leaf.tailRedrawCursor
         )
-        if (
-          nextTailHasNewerBlockedReason(
-            previousWaitText,
-            buildTerminalWaitText(nextTail.lines, nextTail.partialLine, leaf.preview),
-            normalized.text
-          )
-        ) {
+        const nextWaitState = computeTerminalTailWaitState(
+          nextTail.lines,
+          nextTail.partialLine,
+          leaf.preview
+        )
+        if (tailGainedNewerBlockedReason(previousWaitState, nextWaitState, normalized.text)) {
           leaf.waitBlockedAt = at
         }
+        leaf.tailWaitState = nextWaitState
         leaf.tailBuffer = nextTail.lines
         leaf.tailPartialLine = nextTail.partialLine
         leaf.tailRedrawCursor = nextTail.redrawCursor
@@ -5950,7 +5994,9 @@ export class OrcaRuntimeService {
     })
   }
 
-  private async clearHeadlessTerminalBuffer(ptyId: string): Promise<void> {
+  // Public: desktop-initiated clears (ipc/pty.ts) must also drop this mobile
+  // mirror or a resubscribing mobile client resurrects the cleared scrollback.
+  async clearHeadlessTerminalBuffer(ptyId: string): Promise<void> {
     const state = this.headlessTerminals.get(ptyId)
     if (!state) {
       return
@@ -12337,6 +12383,11 @@ export class OrcaRuntimeService {
     // Linux over SSH. Startup command quoting must target the shell that runs it.
     const agentLaunchPlatform = this.getAgentLaunchPlatformForRepo(repo)
     const isRemote = repoIsRemote(repo)
+    const queuedShell = resolveLocalWindowsAgentStartupShell({
+      platform: agentLaunchPlatform,
+      isRemote,
+      terminalWindowsShell: settings.terminalWindowsShell
+    })
     const draftLaunchPlan = buildAgentDraftLaunchPlan({
       agent,
       draft: content,
@@ -12344,6 +12395,7 @@ export class OrcaRuntimeService {
       agentArgs: resolveTuiAgentLaunchArgs(agent, settings.agentDefaultArgs),
       agentEnv: resolveTuiAgentLaunchEnv(agent, settings.agentDefaultEnv),
       platform: agentLaunchPlatform,
+      shell: queuedShell,
       isRemote
     })
     if (draftLaunchPlan) {
@@ -12367,6 +12419,7 @@ export class OrcaRuntimeService {
       agentArgs: resolveTuiAgentLaunchArgs(agent, settings.agentDefaultArgs),
       agentEnv: resolveTuiAgentLaunchEnv(agent, settings.agentDefaultEnv),
       platform: agentLaunchPlatform,
+      shell: queuedShell,
       isRemote,
       allowEmptyPromptLaunch: true
     })
@@ -12402,6 +12455,12 @@ export class OrcaRuntimeService {
     // Why: CLI clients may target SSH runtimes from macOS/Windows, so quote for
     // the workspace shell rather than the client shell.
     const agentLaunchPlatform = this.getAgentLaunchPlatformForRepo(repo)
+    const isRemote = repoIsRemote(repo)
+    const queuedShell = resolveLocalWindowsAgentStartupShell({
+      platform: agentLaunchPlatform,
+      isRemote,
+      terminalWindowsShell: settings.terminalWindowsShell
+    })
     const startupPlan = buildAgentStartupPlan({
       agent,
       prompt: prompt ?? '',
@@ -12409,7 +12468,8 @@ export class OrcaRuntimeService {
       agentArgs: resolveTuiAgentLaunchArgs(agent, settings.agentDefaultArgs),
       agentEnv: resolveTuiAgentLaunchEnv(agent, settings.agentDefaultEnv),
       platform: agentLaunchPlatform,
-      isRemote: repoIsRemote(repo),
+      shell: queuedShell,
+      isRemote,
       allowEmptyPromptLaunch: true
     })
     if (!startupPlan) {
@@ -13020,12 +13080,42 @@ export class OrcaRuntimeService {
     let effectiveSanitizedName = sanitizedName
     const username = await resolveLocalGitUsername(repo.path)
 
-    const baseBranch =
-      args.baseBranch ||
-      repo.worktreeBaseRef ||
-      (hasLocalWorktreeGitOptions
-        ? await resolveDefaultBaseRefViaExec((argv) => gitExecFileAsync(argv, localGitExecOptions))
-        : getDefaultBaseRef(repo.path))
+    const baseBranch = await resolveWorktreeCreateBase({
+      requestedBaseBranch: args.baseBranch,
+      repoWorktreeBaseRef: repo.worktreeBaseRef,
+      resolveDefaultBaseRef: () =>
+        hasLocalWorktreeGitOptions
+          ? resolveDefaultBaseRefViaExec((argv) => gitExecFileAsync(argv, localGitExecOptions))
+          : Promise.resolve(getDefaultBaseRef(repo.path)),
+      isBaseUsable: async (baseBranchCandidate) => {
+        const remoteTrackingBase = await this.resolveRemoteTrackingBase(
+          repo.path,
+          baseBranchCandidate,
+          ...localWorktreeGitOptionArgs
+        )
+        if (remoteTrackingBase) {
+          if (
+            await this.hasRemoteTrackingRef(
+              repo.path,
+              remoteTrackingBase,
+              ...localWorktreeGitOptionArgs
+            )
+          ) {
+            return true
+          }
+          return hasLocalWorktreeBaseRef(
+            repo.path,
+            baseBranchCandidate,
+            hasLocalWorktreeGitOptions ? localWorktreeGitOptions : {}
+          )
+        }
+        return hasLocalWorktreeBaseRef(
+          repo.path,
+          baseBranchCandidate,
+          hasLocalWorktreeGitOptions ? localWorktreeGitOptions : {}
+        )
+      }
+    })
     if (!baseBranch) {
       // Why: getDefaultBaseRef returns null when no suitable ref exists.
       // Don't fabricate 'origin/main' — passing it to addWorktree would
@@ -13156,44 +13246,61 @@ export class OrcaRuntimeService {
         `Could not find an available worktree path for "${sanitizedName}". Pick a different worktree name.`
       )
     }
-    const remoteTrackingBase = await this.resolveRemoteTrackingBase(
+    let remoteTrackingBase = await this.resolveRemoteTrackingBase(
       repo.path,
       baseBranch,
       ...localWorktreeGitOptionArgs
     )
     if (remoteTrackingBase) {
-      const hadLocalBaseRef = await this.hasRemoteTrackingRef(
+      const hadRemoteTrackingBaseRef = await this.hasRemoteTrackingRef(
         repo.path,
         remoteTrackingBase,
         ...localWorktreeGitOptionArgs
       )
-      const refreshResult = await this.getOrStartRemoteTrackingBaseRefresh(
-        repo.path,
-        remoteTrackingBase,
-        ...localWorktreeGitOptionArgs
-      )
-      if (!refreshResult.ok && !hadLocalBaseRef) {
-        // Why: only block creation when the refresh failed AND there is no
-        // usable local base ref to fall back on. If a local remote-tracking ref
-        // already exists, `git worktree add` can create from it — a possibly
-        // stale but valid base — so a transient offline/auth failure must not
-        // make the workspace uncreatable. The compare-to-base view reflects any
-        // drift once the remote is reachable again.
-        throw new Error(
-          `Could not refresh base ref "${baseBranch}" from "${remoteTrackingBase.remote}". Check your network and try again.`
-        )
-      }
-      if (
-        !hadLocalBaseRef &&
-        !(await this.hasRemoteTrackingRef(
+      const hasLocalBaseRef =
+        hadRemoteTrackingBaseRef ||
+        (await hasLocalWorktreeBaseRef(
+          repo.path,
+          baseBranch,
+          hasLocalWorktreeGitOptions ? localWorktreeGitOptions : {}
+        ))
+      if (!hadRemoteTrackingBaseRef && hasLocalBaseRef) {
+        remoteTrackingBase = null
+      } else {
+        const refreshResult = await this.getOrStartRemoteTrackingBaseRefresh(
           repo.path,
           remoteTrackingBase,
           ...localWorktreeGitOptionArgs
-        ))
-      ) {
-        throw new Error(`Base ref "${baseBranch}" was not found after fetching.`)
+        )
+        if (!refreshResult.ok && !hadRemoteTrackingBaseRef) {
+          // Why: only block creation when the refresh failed AND there is no
+          // usable local base ref to fall back on. If a local remote-tracking ref
+          // already exists, `git worktree add` can create from it — a possibly
+          // stale but valid base — so a transient offline/auth failure must not
+          // make the workspace uncreatable. The compare-to-base view reflects any
+          // drift once the remote is reachable again.
+          throw new Error(
+            `Could not refresh base ref "${baseBranch}" from "${remoteTrackingBase.remote}". Check your network and try again.`
+          )
+        }
+        if (
+          !hadRemoteTrackingBaseRef &&
+          !(await this.hasRemoteTrackingRef(
+            repo.path,
+            remoteTrackingBase,
+            ...localWorktreeGitOptionArgs
+          ))
+        ) {
+          throw new Error(`Base ref "${baseBranch}" was not found after fetching.`)
+        }
       }
-    } else if (!(await hasLocalCommitObject(repo.path, baseBranch))) {
+    } else if (
+      !(await hasLocalWorktreeBaseRef(
+        repo.path,
+        baseBranch,
+        hasLocalWorktreeGitOptions ? localWorktreeGitOptions : {}
+      ))
+    ) {
       // Why: local bases keep legacy best-effort fetch behavior. Verified PR
       // SHA bases already have the commit object needed by `git worktree add`.
       try {
@@ -15569,6 +15676,11 @@ export class OrcaRuntimeService {
     const settings = this.store.getSettings()
     const platform = this.getAgentLaunchPlatformForWorkspace(workspace)
     const isRemote = repoIsRemote(workspace.repo)
+    const queuedShell = resolveLocalWindowsAgentStartupShell({
+      platform,
+      isRemote,
+      terminalWindowsShell: settings.terminalWindowsShell
+    })
     const agent = resolveBareAgentLaunchCommand({
       command: opts.command,
       settings,
@@ -15586,6 +15698,7 @@ export class OrcaRuntimeService {
       agentArgs: resolveTuiAgentLaunchArgs(agent, settings.agentDefaultArgs),
       agentEnv: resolveTuiAgentLaunchEnv(agent, settings.agentDefaultEnv),
       platform,
+      shell: queuedShell,
       isRemote,
       allowEmptyPromptLaunch: true
     })
@@ -16130,6 +16243,11 @@ export class OrcaRuntimeService {
     // Why: an SSH workspace runs the CLI through the relay shim (plain `orca`),
     // so the Linux-only `orca-ide` rename must not be applied.
     const isRemote = workspace.repo ? repoIsRemote(workspace.repo) : repoIsRemote(workspace)
+    const queuedShell = resolveLocalWindowsAgentStartupShell({
+      platform,
+      isRemote,
+      terminalWindowsShell: settings.terminalWindowsShell
+    })
     const startupPlan = buildAgentStartupPlan({
       agent: opts.agent,
       prompt: '',
@@ -16137,6 +16255,7 @@ export class OrcaRuntimeService {
       agentArgs: resolveTuiAgentLaunchArgs(opts.agent, settings.agentDefaultArgs),
       agentEnv: resolveTuiAgentLaunchEnv(opts.agent, settings.agentDefaultEnv),
       platform,
+      shell: queuedShell,
       isRemote,
       allowEmptyPromptLaunch: true
     })
@@ -18131,6 +18250,10 @@ export class OrcaRuntimeService {
     pty.tailTruncated = false
     pty.tailLinesTotal = 0
     pty.waitBlockedAt = null
+    // Why: the tail is now empty, so the memoized wait scan must not be reused as
+    // the next chunk's "previous" state — clear it so onPtyData recomputes from
+    // the reset tail if this record resumes output (adoption/reattach).
+    pty.tailWaitState = undefined
   }
 
   private pruneDisconnectedPtyRecords(): void {
@@ -19841,6 +19964,12 @@ export class OrcaRuntimeService {
       return
     }
 
+    // The active coordinator prompt is user-owned input, so push-on-idle must not synthesize Enter.
+    if (this._orchestrationDb.getActiveCoordinatorRun()?.coordinator_handle === handle) {
+      this._orchestrationDb.markAsDelivered(unread.map((m) => m.id))
+      return
+    }
+
     const tabTitle = this.tabs.get(leaf.tabId)?.title
     if (isCursorAgentOrchestrationTarget(leaf, tabTitle)) {
       // Why: Cursor Agent treats injected PTY text as editable prompt input.
@@ -21453,7 +21582,7 @@ export class OrcaRuntimeService {
   }
 
   private defaultLinearAttachmentTitle(url: URL): string {
-    const tail = url.pathname.split('/').filter(Boolean).at(-1)
+    const tail = url.pathname.split('/').findLast(Boolean)
     return tail ? `${url.host}/${tail}` : url.host
   }
 
@@ -23036,6 +23165,63 @@ function buildTerminalWaitText(lines: string[], partialLine: string, preview: st
   return waitText.length > 0 ? waitText : preview
 }
 
+export type TerminalTailWaitState = {
+  waitText: string
+  signal: { reason: RuntimeTerminalWaitBlockedReason; index: number } | null
+  // Why: the retained tail is authoritative; `preview` is only a fallback for an
+  // empty tail. A preview-derived state depends on a value that is recomputed
+  // after each append, so it must not be reused as the next chunk's previous
+  // state — reuse is gated on fromTail.
+  fromTail: boolean
+}
+
+// Why: onPtyData runs per raw PTY chunk (hundreds/sec under load). Building the
+// wait text (a full map/trim/filter/join over the up-to-256KB retained tail)
+// and lower-casing + scanning it once per chunk is unavoidable, but the old
+// code did it twice — once for the pre-append tail and once for the post-append
+// tail — every chunk. Caching the post-append state lets the next chunk reuse it
+// as its pre-append state, halving the per-chunk full-tail work.
+export function computeTerminalTailWaitState(
+  lines: string[],
+  partialLine: string,
+  preview: string
+): TerminalTailWaitState {
+  const tailText = buildTailLines(lines, partialLine)
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .join('\n')
+  const fromTail = tailText.length > 0
+  const waitText = fromTail ? tailText : preview
+  return {
+    waitText,
+    signal: findActionableTerminalWaitBlockedSignal(waitText.toLowerCase()),
+    fromTail
+  }
+}
+
+// Why: decides whether the appended chunk introduced a newer actionable blocked
+// prompt, consuming precomputed wait states so the full-tail scans are not
+// repeated per chunk (replaces the former inline double full-tail scan).
+export function tailGainedNewerBlockedReason(
+  previous: TerminalTailWaitState,
+  next: TerminalTailWaitState,
+  appendedText: string
+): boolean {
+  if (next.signal === null) {
+    return false
+  }
+  // Why: permission prompts can arrive split across PTY chunks. Stamp when the
+  // accumulated tail first becomes blocked, or when a later prompt appears after
+  // stale blocked text already in the tail.
+  if (previous.signal === null) {
+    return true
+  }
+  const appendCandidateSignal = findActionableTerminalWaitBlockedSignal(
+    `${previous.waitText}${appendedText}`.toLowerCase()
+  )
+  return appendCandidateSignal !== null && appendCandidateSignal.index > previous.signal.index
+}
+
 export function appendNormalizedToTailBuffer(
   previousLines: string[],
   previousPartialLine: string,
@@ -23877,30 +24063,6 @@ function isKnownReadyPromptPreview(preview: string): boolean {
 function detectTerminalWaitBlockedReason(preview: string): RuntimeTerminalWaitBlockedReason | null {
   const normalized = preview.toLowerCase()
   return findActionableTerminalWaitBlockedSignal(normalized)?.reason ?? null
-}
-
-function nextTailHasNewerBlockedReason(
-  previousWaitText: string,
-  nextWaitText: string,
-  appendedText: string
-): boolean {
-  const nextBlockedSignal = findActionableTerminalWaitBlockedSignal(nextWaitText.toLowerCase())
-  if (!nextBlockedSignal) {
-    return false
-  }
-  // Why: permission prompts can arrive split across PTY chunks. Stamp the
-  // blocked signal when the accumulated tail first becomes blocked, or when
-  // a later prompt appears after stale blocked text already in the tail.
-  const previousBlockedSignal = findActionableTerminalWaitBlockedSignal(
-    previousWaitText.toLowerCase()
-  )
-  if (previousBlockedSignal === null) {
-    return true
-  }
-  const appendCandidateSignal = findActionableTerminalWaitBlockedSignal(
-    `${previousWaitText}${appendedText}`.toLowerCase()
-  )
-  return appendCandidateSignal !== null && appendCandidateSignal.index > previousBlockedSignal.index
 }
 
 function findActionableTerminalWaitBlockedSignal(
